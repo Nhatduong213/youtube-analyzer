@@ -22,10 +22,10 @@ export async function saveUserSettings(formData: FormData) {
     if (apiKey) {
       const ref = `yt_key_${userId}`;
       
-      const { error: rpcError } = await ssrClient.rpc('vault_create_secret', { 
-        name: ref,
-        secret: apiKey 
-      });
+      const { error: rpcError } = await ssrClient.rpc('create_secret', {
+        new_secret: apiKey,
+        new_name: ref
+      }, { head: false });
 
       if (rpcError) {
         throw new Error(`Failed to save secret to vault: ${rpcError.message}`);
