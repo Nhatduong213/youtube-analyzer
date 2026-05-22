@@ -23,8 +23,8 @@ export async function saveUserSettings(formData: FormData) {
       const ref = `yt_key_${userId}`;
       
       const { error: rpcError } = await ssrClient.rpc('vault_create_secret', { 
-        secret: apiKey, 
-        name: ref 
+        name: ref,
+        secret: apiKey 
       });
 
       if (rpcError) {
