@@ -1,8 +1,34 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Users, Eye, TrendingUp } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-export default function Dashboard() {
+// Forcing dynamic rendering to ensure fresh data on every load
+export const dynamic = 'force-dynamic';
+
+export default async function Dashboard() {
+  // Fetch Channel KPI (MVP: taking the first channel available)
+  const { data: channelData } = await supabase
+    .from("channels")
+    .select("subscriber_count, view_count, last_synced_at")
+    .limit(1)
+    .single();
+
+  const totalSubs = channelData?.subscriber_count || 0;
+  const totalViews = channelData?.view_count || 0;
+  
+  // Calculate if last synced is older than 2 hours
+  const lastSynced = channelData?.last_synced_at ? new Date(channelData.last_synced_at) : null;
+  const hoursSinceSync = lastSynced ? (Date.now() - lastSynced.getTime()) / (1000 * 60 * 60) : 0;
+  const isSyncDelayed = hoursSinceSync > 2;
+
+  // Fetch Blacklist Data joined with Videos table
+  const { data: blacklist } = await supabase
+    .from("daily_blacklist")
+    .select("*, videos(title)")
+    .order("created_at", { ascending: false })
+    .limit(10);
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -11,15 +37,19 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-1">Track your YouTube channel performance and blacklist status.</p>
         </div>
         
-        <div className="flex items-center gap-3 bg-destructive/10 text-destructive px-4 py-2 rounded-xl border border-destructive/20">
+        <div className={`flex items-center gap-3 px-4 py-2 rounded-xl border ${isSyncDelayed ? 'bg-destructive/10 text-destructive border-destructive/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
           <AlertCircle className="h-5 w-5" />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">Last synced: 3 hours ago</span>
-            <span className="text-xs opacity-80">Warning: Sync delayed</span>
+            <span className="text-sm font-semibold">
+              {lastSynced ? `Last synced: ${Math.floor(hoursSinceSync)} hours ago` : 'Never synced'}
+            </span>
+            {isSyncDelayed && <span className="text-xs opacity-80">Warning: Sync delayed</span>}
           </div>
-          <button className="ml-2 text-xs bg-destructive text-destructive-foreground px-3 py-1.5 rounded-lg hover:bg-destructive/90 transition-colors">
-            Report Issue
-          </button>
+          {isSyncDelayed && (
+            <button className="ml-2 text-xs bg-destructive text-destructive-foreground px-3 py-1.5 rounded-lg hover:bg-destructive/90 transition-colors">
+              Report Issue
+            </button>
+          )}
         </div>
       </div>
 
@@ -30,10 +60,7 @@ export default function Dashboard() {
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">124,500</div>
-            <p className="text-xs text-emerald-400 mt-1 flex items-center">
-              <TrendingUp className="h-3 w-3 mr-1" /> +12% from last month
-            </p>
+            <div className="text-3xl font-bold">{totalSubs.toLocaleString()}</div>
           </CardContent>
         </Card>
         
@@ -43,10 +70,7 @@ export default function Dashboard() {
             <Eye className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">12,450,200</div>
-            <p className="text-xs text-emerald-400 mt-1 flex items-center">
-              <TrendingUp className="h-3 w-3 mr-1" /> +8% from last month
-            </p>
+            <div className="text-3xl font-bold">{totalViews.toLocaleString()}</div>
           </CardContent>
         </Card>
 
@@ -57,9 +81,9 @@ export default function Dashboard() {
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="text-3xl font-bold text-gradient">3,450</div>
+            <div className="text-3xl font-bold text-gradient">Data in Turso</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Views per hour on average
+              Connect Turso to view this metric
             </p>
           </CardContent>
         </Card>
@@ -68,11 +92,11 @@ export default function Dashboard() {
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">Recent Blacklisted Videos</h2>
         <Card className="glass-card">
-          <div className="p-0">
+          <div className="p-0 overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-muted-foreground uppercase bg-muted/20 border-b border-border/50">
                 <tr>
-                  <th className="px-6 py-4 font-medium">Video ID</th>
+                  <th className="px-6 py-4 font-medium">Video Title / ID</th>
                   <th className="px-6 py-4 font-medium">VPH (First Hour)</th>
                   <th className="px-6 py-4 font-medium">Baseline VPH</th>
                   <th className="px-6 py-4 font-medium">Multiplier</th>
@@ -80,18 +104,31 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {[
-                  { video_id: "dQw4w9WgXcQ", vph_first_hour: 450, baseline_vph: 1200, multiplier: 3, detected_at: "2026-05-22T08:00:00Z" },
-                  { video_id: "jNQXAC9IVRw", vph_first_hour: 200, baseline_vph: 800, multiplier: 3, detected_at: "2026-05-21T00:00:00Z" }
-                ].map((row, idx) => (
-                  <tr key={idx} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-6 py-4 font-mono text-primary">{row.video_id}</td>
-                    <td className="px-6 py-4 text-destructive font-semibold">{row.vph_first_hour}</td>
-                    <td className="px-6 py-4">{row.baseline_vph}</td>
-                    <td className="px-6 py-4">{row.multiplier}x</td>
-                    <td className="px-6 py-4 text-muted-foreground">{new Date(row.detected_at).toLocaleString()}</td>
+                {(!blacklist || blacklist.length === 0) && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                      No recent blacklisted videos found.
+                    </td>
                   </tr>
-                ))}
+                )}
+                {blacklist?.map((row, idx) => {
+                  const videoTitle = Array.isArray(row.videos) ? row.videos[0]?.title : row.videos?.title;
+                  
+                  return (
+                    <tr key={idx} className="hover:bg-muted/10 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-primary max-w-xs truncate" title={videoTitle}>
+                          {videoTitle || "Unknown Title"}
+                        </div>
+                        <div className="font-mono text-xs text-muted-foreground">{row.video_id}</div>
+                      </td>
+                      <td className="px-6 py-4 text-destructive font-semibold">{Number(row.vph_first_hour).toLocaleString()}</td>
+                      <td className="px-6 py-4">{Number(row.baseline_vph).toLocaleString()}</td>
+                      <td className="px-6 py-4">{row.multiplier}x</td>
+                      <td className="px-6 py-4 text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

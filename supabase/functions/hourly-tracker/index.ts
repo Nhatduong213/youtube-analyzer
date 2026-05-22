@@ -20,7 +20,7 @@ serve(async (req) => {
     // 1. Stagger logic
     const { data: channels, error: channelErr } = await supabase
       .from('channels')
-      .select('id, user_id, users(youtube_api_key)')
+      .select('id, user_id, users(youtube_key_ref)')
       .order('created_at', { ascending: true });
 
     if (channelErr) throw channelErr;
@@ -32,10 +32,22 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, message: 'No channel at this index' }), { headers: { "Content-Type": "application/json" } });
     }
 
-    const apiKey = targetChannel.users?.youtube_api_key;
-    if (!apiKey) {
-      throw new Error(`No YouTube API key for user ${targetChannel.user_id}`);
+    const keyRef = targetChannel.users?.youtube_key_ref;
+    if (!keyRef) {
+      throw new Error(`No YouTube API key reference for user ${targetChannel.user_id}`);
     }
+
+    const { data: vaultData, error: vaultErr } = await supabase
+      .from('vault.decrypted_secrets')
+      .select('decrypted_secret')
+      .eq('name', keyRef)
+      .single();
+
+    if (vaultErr || !vaultData) {
+      throw new Error(`Failed to retrieve API key from vault for user ${targetChannel.user_id}`);
+    }
+
+    const apiKey = vaultData.decrypted_secret;
 
     console.log(`Processing channel: ${targetChannel.id}`);
 
