@@ -1,9 +1,18 @@
 "use server";
 
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 
-export async function saveUserSettings(userId: string, formData: FormData) {
+export async function saveUserSettings(formData: FormData) {
+  const ssrClient = await createClient();
+  const { data: { user } } = await ssrClient.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "Unauthorized" };
+  }
+  
+  const userId = user.id;
+
   const apiKey = formData.get("apiKey")?.toString();
   const timezone = formData.get("timezone")?.toString();
   const spikeMultiplier = formData.get("spikeMultiplier")?.toString(); // Hiện tại có thể chưa lưu vào DB
@@ -13,7 +22,7 @@ export async function saveUserSettings(userId: string, formData: FormData) {
     if (apiKey) {
       const ref = `yt_key_${userId}`;
       
-      const { error: rpcError } = await supabase.rpc('vault_create_secret', { 
+      const { error: rpcError } = await ssrClient.rpc('vault_create_secret', { 
         secret: apiKey, 
         name: ref 
       });
@@ -23,7 +32,7 @@ export async function saveUserSettings(userId: string, formData: FormData) {
       }
 
       // 2. Cập nhật reference vào bảng users
-      const { error: updateError } = await supabase
+      const { error: updateError } = await ssrClient
         .from('users')
         .update({ 
           youtube_key_ref: ref,
@@ -36,7 +45,7 @@ export async function saveUserSettings(userId: string, formData: FormData) {
       }
     } else {
       // Nếu không nhập API Key, chỉ update timezone
-      const { error: updateError } = await supabase
+      const { error: updateError } = await ssrClient
         .from('users')
         .update({ timezone: timezone || 'UTC' })
         .eq('id', userId);
