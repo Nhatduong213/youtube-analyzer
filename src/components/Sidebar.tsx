@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, BarChart3, Settings, Youtube, Bot } from "lucide-react";
+import { LayoutDashboard, BarChart3, Settings, Tv, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -19,7 +19,7 @@ export function Sidebar() {
     <div className="flex h-screen w-64 flex-col glass-card border-r border-y-0 border-l-0 border-border/50 bg-card/40 backdrop-blur-3xl relative z-10">
       <div className="flex h-16 items-center gap-3 px-6 py-8">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-[oklch(0.7_0.2_180)] text-primary-foreground shadow-lg shadow-primary/20">
-          <Youtube className="h-6 w-6" />
+          <Tv className="h-6 w-6" />
         </div>
         <span className="text-lg font-bold text-gradient">BA Analyzer</span>
       </div>
