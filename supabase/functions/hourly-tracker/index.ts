@@ -109,9 +109,20 @@ serve(async (req) => {
           thumbnail_url: snippet.thumbnails?.high?.url || ''
         });
 
-        // Calculate VPH - simple calc for snapshot (advanced calc in daily scan)
-        const hoursSincePublished = (Date.now() - new Date(snippet.publishedAt).getTime()) / (1000 * 60 * 60);
-        const vph = hoursSincePublished > 0 ? Number(stats.viewCount) / hoursSincePublished : 0;
+        // Calculate VPH based on marginal view diff from last snapshot
+        const lastSnap = await turso.execute({
+          sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 1",
+          args: [item.id]
+        });
+
+        let vph = 0;
+        if (lastSnap.rows.length > 0) {
+          const lastViews = Number(lastSnap.rows[0].view_count);
+          const lastTime = new Date(lastSnap.rows[0].captured_at as string).getTime();
+          const hoursDiff = (Date.now() - lastTime) / (1000 * 60 * 60);
+          const viewDiff = Number(stats.viewCount) - lastViews;
+          vph = hoursDiff > 0 ? Math.max(0, viewDiff / hoursDiff) : 0;
+        }
 
         // Insert Turso video snapshot
         await turso.execute({
