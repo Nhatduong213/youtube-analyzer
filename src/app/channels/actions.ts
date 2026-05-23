@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export async function addChannel(formData: FormData) {
   const ssrClient = await createClient();
@@ -33,21 +34,19 @@ export async function addChannel(formData: FormData) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    console.log('Service role key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('Service role key exists:', !!serviceRoleKey);
+    console.log('Supabase URL:', supabaseUrl);
     
     if (supabaseUrl && serviceRoleKey) {
-      await fetch(`${supabaseUrl}/functions/v1/hourly-tracker`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${serviceRoleKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ minute: new Date().getMinutes() })
+      const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
+      
+      const { data, error } = await adminClient.functions.invoke('hourly-tracker', {
+        body: { minute: new Date().getMinutes() }
       });
+      console.log('Edge function result:', data, error);
     }
   } catch (err) {
-    console.error("Failed to trigger edge function", err);
+    console.error('Edge function threw:', err);
   }
 
   revalidatePath("/");
