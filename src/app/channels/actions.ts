@@ -37,13 +37,20 @@ export async function addChannel(formData: FormData) {
     console.log('Service role key exists:', !!serviceRoleKey);
     console.log('Supabase URL:', supabaseUrl);
     
-    if (supabaseUrl && serviceRoleKey) {
+    if (!serviceRoleKey) {
+      console.error('Missing SUPABASE_SERVICE_ROLE_KEY');
+    } else if (supabaseUrl) {
       const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
       
       const { data, error } = await adminClient.functions.invoke('hourly-tracker', {
         body: { minute: new Date().getMinutes() }
       });
-      console.log('Edge function result:', data, error);
+      
+      if (error) {
+        console.error('Edge function error:', error.message, (error as any).context?.status);
+      } else {
+        console.log('Edge function ok:', data);
+      }
     }
   } catch (err) {
     console.error('Edge function threw:', err);
