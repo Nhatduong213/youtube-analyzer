@@ -19,36 +19,43 @@ export default async function Dashboard() {
   let lastSyncedTime: number = 0;
   let blacklist: any[] = [];
 
-  if (user) {
-    const { data: channels } = await supabase
-      .from("channels")
-      .select("id, subscriber_count, view_count, last_synced_at")
-      .eq("user_id", user.id);
+  // Query through user_channels junction table
+  const { data: userChannels } = await supabase
+    .from("user_channels")
+    .select("channels(id, subscriber_count, view_count, last_synced_at)")
+    .eq("user_id", user.id);
 
-    if (channels && channels.length > 0) {
-      channels.forEach(ch => {
-        totalSubs += Number(ch.subscriber_count) || 0;
-        totalViews += Number(ch.view_count) || 0;
-        if (ch.last_synced_at) {
-          const t = new Date(ch.last_synced_at).getTime();
-          if (t > lastSyncedTime) lastSyncedTime = t;
-        }
-      });
+  const channels = userChannels?.map((uc: any) => uc.channels).filter(Boolean) || [];
 
-      const channelIds = channels.map(c => c.id);
-      
-      const { data: bList } = await supabase
-        .from("daily_blacklist")
-        .select("*, videos(title)")
-        .in("channel_id", channelIds)
-        .order("detected_at", { ascending: false })
-        .limit(10);
-        
-      if (bList) {
-        blacklist = bList;
+  if (channels.length > 0) {
+    channels.forEach((ch: any) => {
+      totalSubs += Number(ch.subscriber_count) || 0;
+      totalViews += Number(ch.view_count) || 0;
+      if (ch.last_synced_at) {
+        const t = new Date(ch.last_synced_at).getTime();
+        if (t > lastSyncedTime) lastSyncedTime = t;
       }
+    });
+
+    const channelIds = channels.map((c: any) => c.id);
+    
+    const { data: bList } = await supabase
+      .from("daily_blacklist")
+      .select("*, videos(title)")
+      .in("channel_id", channelIds)
+      .order("detected_at", { ascending: false })
+      .limit(10);
+      
+    if (bList) {
+      blacklist = bList;
     }
   }
+
+  // Check for API key errors
+  const { data: keyErrors } = await supabase
+    .from("api_key_errors")
+    .select("channel_id, error_message")
+    .eq("user_id", user.id);
 
   const hoursSinceSync = lastSyncedTime ? (Date.now() - lastSyncedTime) / (1000 * 60 * 60) : 0;
   const isSyncDelayed = hoursSinceSync > 2;

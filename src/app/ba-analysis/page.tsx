@@ -26,14 +26,16 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   let activeChannelId = searchParams.channelId;
 
   if (user) {
-    // Lấy toàn bộ channel của user để hiển thị lên dropdown
-    const { data: channels } = await supabase
-      .from('channels')
-      .select('id, title, view_count')
+    // Lấy toàn bộ channel của user qua user_channels junction table
+    const { data: userChannels } = await supabase
+      .from('user_channels')
+      .select('channels(id, title, view_count)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
+
+    const channels = userChannels?.map((uc: any) => uc.channels).filter(Boolean) || [];
       
-    if (channels && channels.length > 0) {
+    if (channels.length > 0) {
       channelsList = channels;
       if (!activeChannelId) {
         activeChannelId = channels[0].id;

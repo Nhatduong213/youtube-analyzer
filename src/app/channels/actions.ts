@@ -38,42 +38,44 @@ export async function addChannel(formData: FormData) {
     channelId = data.items[0].id;
   }
 
-  // Insert dummy channel
-  const { error } = await ssrClient
+  // 1. Upsert channel (shared, no user_id)
+  const { error: channelErr } = await ssrClient
     .from("channels")
-    .insert({
-      id: channelId,
-      user_id: user.id,
-      title: "Syncing...", // Temporary title
-    });
+    .upsert({ id: channelId, title: "Syncing..." }, { onConflict: 'id', ignoreDuplicates: true });
 
-  if (error) {
-    if (error.code === '23505' || error.message.includes('duplicate key')) {
-      return { success: false, error: "This channel has already been added to the system." };
-    }
-    return { success: false, error: error.message };
+  if (channelErr) {
+    return { success: false, error: channelErr.message };
   }
 
-  // Trigger edge function immediately to fetch real data
+  // 2. Link user <-> channel
+  const { error: linkErr } = await ssrClient
+    .from("user_channels")
+    .insert({ user_id: user.id, channel_id: channelId });
+
+  if (linkErr) {
+    if (linkErr.code === '23505' || linkErr.message.includes('duplicate key')) {
+      return { success: false, error: "Bạn đã follow kênh này rồi." };
+    }
+    return { success: false, error: linkErr.message };
+  }
+
+  // 3. Clear any previous API key errors for this user+channel
+  await ssrClient.from("api_key_errors").delete().eq("user_id", user.id).eq("channel_id", channelId);
+
+  // 4. Trigger edge function immediately to fetch real data
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    console.log('Service role key exists:', !!serviceRoleKey);
-    console.log('Supabase URL:', supabaseUrl);
     
-    if (!serviceRoleKey) {
-      console.error('Missing SUPABASE_SERVICE_ROLE_KEY');
-    } else if (supabaseUrl) {
+    if (serviceRoleKey && supabaseUrl) {
       const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
       
-      const { data, error } = await adminClient.functions.invoke('hourly-tracker', {
-        body: { channelId }
+      const { error } = await adminClient.functions.invoke('hourly-tracker', {
+        body: { channelId, userId: user.id }
       });
       
       if (error) {
-        console.error('Edge function error:', error.message, (error as any).context?.status);
-      } else {
-        console.log('Edge function ok:', data);
+        console.error('Edge function error:', error.message);
       }
     }
   } catch (err) {
@@ -95,15 +97,19 @@ export async function deleteChannel(channelId: string) {
     return { success: false, error: "Unauthorized" };
   }
 
+  // Chỉ xoá link user <-> channel, KHÔNG xoá channel gốc
   const { error } = await ssrClient
-    .from("channels")
+    .from("user_channels")
     .delete()
-    .eq("id", channelId)
+    .eq("channel_id", channelId)
     .eq("user_id", user.id);
 
   if (error) {
     return { success: false, error: error.message };
   }
+
+  // Xoá luôn api_key_errors
+  await ssrClient.from("api_key_errors").delete().eq("user_id", user.id).eq("channel_id", channelId);
 
   revalidatePath("/");
   revalidatePath("/channels");

@@ -12,11 +12,15 @@ export default async function ChannelsPage() {
     redirect("/login");
   }
 
-  const { data: channels } = await supabase
-    .from("channels")
-    .select("*")
+  // Query through user_channels junction table
+  const { data: userChannels } = await supabase
+    .from("user_channels")
+    .select("channels(*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
-  return <ChannelsClient initialChannels={channels || []} />;
+  // Flatten: extract channels from nested structure
+  const channels = userChannels?.map((uc: any) => uc.channels).filter(Boolean) || [];
+
+  return <ChannelsClient initialChannels={channels} />;
 }

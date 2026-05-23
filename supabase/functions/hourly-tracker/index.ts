@@ -4,7 +4,9 @@ import { createClient as createLibSQLClient } from "https://esm.sh/@libsql/clien
 
 serve(async (req) => {
   try {
-    const { minute, channelId } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const targetChannelId = body.channelId;
+    const targetUserId = body.userId; // Optional: fetch for a specific user only
 
     const supabase = createSupabaseClient(
       Deno.env.get('SUPABASE_URL') || '',
@@ -16,145 +18,154 @@ serve(async (req) => {
       authToken: Deno.env.get('TURSO_AUTH_TOKEN') || '',
     });
 
-    // 1. Target resolution
-    let targetChannels = [];
-    
-    if (channelId) {
-      console.log(`Direct invoke for channel: ${channelId}`);
-      const { data, error: channelErr } = await supabase
-        .from('channels')
-        .select('id, user_id, users(youtube_key_ref)')
-        .eq('id', channelId)
-        .single();
-        
-      if (channelErr) throw channelErr;
-      targetChannels = [data];
-    } else {
-      console.log(`Running hourly tracker for all channels at minute: ${minute}`);
-      const { data: channels, error: channelErr } = await supabase
-        .from('channels')
-        .select('id, user_id, users(youtube_key_ref)')
-        .order('created_at', { ascending: true });
-
-      if (channelErr) throw channelErr;
-      targetChannels = channels || [];
+    // 1. Get all users (or specific user)
+    let usersQuery = supabase.from('users').select('id, youtube_key_ref');
+    if (targetUserId) {
+      usersQuery = usersQuery.eq('id', targetUserId);
+    }
+    const { data: users, error: usersErr } = await usersQuery;
+    if (usersErr) throw usersErr;
+    if (!users || users.length === 0) {
+      return new Response(JSON.stringify({ success: true, message: 'No users found' }), { headers: { "Content-Type": "application/json" } });
     }
 
-    if (targetChannels.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'No channels to process' }), { headers: { "Content-Type": "application/json" } });
-    }
+    let totalProcessed = 0;
+    let totalErrors = 0;
 
-    for (const targetChannel of targetChannels) {
-      try {
-        const keyRef = targetChannel.users?.youtube_key_ref;
-        if (!keyRef) {
-          console.error(`No YouTube API key reference for user ${targetChannel.user_id}`);
-          continue;
+    // 2. Loop per user
+    for (const user of users) {
+      const keyRef = user.youtube_key_ref;
+      if (!keyRef) {
+        console.log(`User ${user.id} has no API key configured, skipping`);
+        continue;
+      }
+
+      // Get API key from Vault
+      const { data: apiKey, error: vaultErr } = await supabase.rpc('get_secret', { secret_name: keyRef });
+      if (vaultErr || !apiKey) {
+        console.error(`User ${user.id}: failed to get API key from vault`);
+        continue;
+      }
+
+      // Get this user's channels (or specific channel)
+      let channelsQuery = supabase.from('user_channels').select('channel_id').eq('user_id', user.id);
+      if (targetChannelId) {
+        channelsQuery = channelsQuery.eq('channel_id', targetChannelId);
+      }
+      const { data: userChannels, error: ucErr } = await channelsQuery;
+      if (ucErr || !userChannels || userChannels.length === 0) continue;
+
+      // Get today's blacklisted videos for this user's channels
+      const todayStart = new Date(new Date().setUTCHours(0,0,0,0)).toISOString();
+      const channelIds = userChannels.map(uc => uc.channel_id);
+      const { data: blacklistData } = await supabase
+        .from('daily_blacklist')
+        .select('video_id')
+        .in('channel_id', channelIds)
+        .gte('detected_at', todayStart);
+      const blacklistedIds = new Set(blacklistData?.map(b => b.video_id) || []);
+
+      // 3. Process each channel with this user's key
+      for (const uc of userChannels) {
+        const channelId = uc.channel_id;
+        console.log(`User ${user.id} → Channel ${channelId}`);
+
+        try {
+          // Clear previous key errors for this user+channel
+          await supabase.from('api_key_errors').delete().eq('user_id', user.id).eq('channel_id', channelId);
+
+          // Fetch channel stats
+          const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${channelId}&key=${apiKey}`);
+          
+          if (channelRes.status === 403) {
+            // API key error → log for this user
+            await supabase.from('api_key_errors').upsert({
+              user_id: user.id,
+              channel_id: channelId,
+              error_message: 'YouTube API quota exceeded or key invalid (HTTP 403)'
+            });
+            totalErrors++;
+            console.error(`User ${user.id}: API key error 403 for channel ${channelId}`);
+            continue;
+          }
+
+          if (channelRes.status >= 500) {
+            await supabase.from('api_key_errors').upsert({
+              user_id: user.id,
+              channel_id: channelId,
+              error_message: `YouTube API server error (HTTP ${channelRes.status})`
+            });
+            totalErrors++;
+            continue;
+          }
+
+          const channelData = await channelRes.json();
+          if (!channelData.items || channelData.items.length === 0) continue;
+
+          const channelInfo = channelData.items[0];
+          const stats = channelInfo.statistics;
+          const snippet = channelInfo.snippet;
+
+          // Update channel data (shared)
+          await supabase.from('channels').update({
+            title: snippet.title,
+            thumbnail_url: snippet.thumbnails?.default?.url || '',
+            subscriber_count: parseInt(stats.subscriberCount) || 0,
+            video_count: parseInt(stats.videoCount) || 0,
+            view_count: parseInt(stats.viewCount) || 0,
+            last_synced_at: new Date().toISOString()
+          }).eq('id', channelId);
+
+          // Fetch videos
+          const uploadsPlaylistId = channelId.replace(/^UC/, 'UU');
+          const playlistRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}`);
+          const playlistData = await playlistRes.json();
+
+          // Filter out blacklisted videos
+          const activeItems = (playlistData.items || []).filter((item: any) => !blacklistedIds.has(item.contentDetails.videoId));
+          const videoIds = activeItems.map((item: any) => item.contentDetails.videoId).join(',') || '';
+
+          if (videoIds) {
+            const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds}&key=${apiKey}`);
+            const videoData = await videoRes.json();
+
+            for (const item of (videoData.items || [])) {
+              const vSnippet = item.snippet;
+              const vStats = item.statistics;
+
+              // Upsert video to Supabase (shared)
+              await supabase.from('videos').upsert({
+                id: item.id,
+                channel_id: channelId,
+                title: vSnippet.title,
+                description: vSnippet.description || '',
+                tags: vSnippet.tags || [],
+                published_at: vSnippet.publishedAt,
+                thumbnail_url: vSnippet.thumbnails?.high?.url || ''
+              });
+
+              // Insert snapshot into Turso
+              const viewCount = parseInt(vStats.viewCount) || 0;
+              try {
+                await turso.execute({
+                  sql: "INSERT INTO video_snapshots (video_id, channel_id, view_count, captured_at) VALUES (?, ?, ?, datetime('now'))",
+                  args: [item.id, channelId, viewCount]
+                });
+              } catch (tursoErr) {
+                console.error('Turso insert error:', tursoErr);
+              }
+            }
+          }
+
+          totalProcessed++;
+        } catch (channelErr) {
+          console.error(`Error processing channel ${channelId} for user ${user.id}:`, channelErr);
+          totalErrors++;
         }
-
-        const { data: vaultData, error: vaultErr } = await supabase
-          .rpc('get_secret', { secret_name: keyRef });
-
-        if (vaultErr || !vaultData) {
-          console.error(`Secret "${keyRef}" returned null or error`, vaultErr);
-          continue;
-        }
-
-        const apiKey = vaultData;
-
-        console.log(`Processing channel: ${targetChannel.id}`);
-
-        // 1.5 Get today's blacklisted videos for this channel
-        const todayStart = new Date(new Date().setUTCHours(0,0,0,0)).toISOString();
-        const { data: blacklistData } = await supabase
-          .from('daily_blacklist')
-          .select('video_id')
-          .eq('channel_id', targetChannel.id)
-          .gte('detected_at', todayStart);
-        
-        const blacklistedIds = new Set(blacklistData?.map(b => b.video_id) || []);
-        console.log(`Found ${blacklistedIds.size} blacklisted videos for today`);
-
-    // 2. Fetch Channel Stats
-    const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${targetChannel.id}&key=${apiKey}`);
-    const channelData = await channelRes.json();
-    if (channelData.items && channelData.items.length > 0) {
-      const stats = channelData.items[0].statistics;
-      
-      // Update Supabase channel stats
-      await supabase.from('channels').update({
-        title: channelData.items[0].snippet.title,
-        thumbnail_url: channelData.items[0].snippet.thumbnails?.high?.url || '',
-        subscriber_count: stats.subscriberCount,
-        video_count: stats.videoCount,
-        view_count: stats.viewCount,
-        last_synced_at: new Date().toISOString()
-      }).eq('id', targetChannel.id);
-
-      // Insert Turso channel snapshot
-      await turso.execute({
-        sql: "INSERT INTO channel_snapshots (channel_id, subscriber_count, video_count, view_count) VALUES (?, ?, ?, ?)",
-        args: [targetChannel.id, stats.subscriberCount, stats.videoCount, stats.viewCount]
-      });
-    }
-
-    // 3. Fetch Recent Videos Stats (Max 50 videos for performance in Edge Fn)
-    // Thay search bằng playlistItems để tiết kiệm quota (1 unit thay vì 100 units/call)
-    const uploadsPlaylistId = targetChannel.id.replace(/^UC/, 'UU');
-    const playlistRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}`);
-    const playlistData = await playlistRes.json();
-    
-    // Filter out blacklisted videos
-    const activeItems = (playlistData.items || []).filter((item: any) => !blacklistedIds.has(item.contentDetails.videoId));
-    const videoIds = activeItems.map((item: any) => item.contentDetails.videoId).join(',') || '';
-
-    if (videoIds) {
-      const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds}&key=${apiKey}`);
-      const videoData = await videoRes.json();
-      
-      for (const item of videoData.items || []) {
-        const stats = item.statistics;
-        const snippet = item.snippet;
-        
-        // Upsert video to Supabase
-        await supabase.from('videos').upsert({
-          id: item.id,
-          channel_id: targetChannel.id,
-          title: snippet.title,
-          description: snippet.description || '',
-          tags: snippet.tags || [],
-          published_at: snippet.publishedAt,
-          thumbnail_url: snippet.thumbnails?.high?.url || ''
-        });
-
-        // Calculate VPH based on marginal view diff from last snapshot
-        const lastSnap = await turso.execute({
-          sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 1",
-          args: [item.id]
-        });
-
-        let vph = 0;
-        if (lastSnap.rows.length > 0) {
-          const lastViews = Number(lastSnap.rows[0].view_count);
-          const lastTime = new Date(lastSnap.rows[0].captured_at as string).getTime();
-          const hoursDiff = (Date.now() - lastTime) / (1000 * 60 * 60);
-          const viewDiff = Number(stats.viewCount) - lastViews;
-          vph = hoursDiff > 0 ? Math.max(0, viewDiff / hoursDiff) : 0;
-        }
-
-        // Insert Turso video snapshot
-        await turso.execute({
-          sql: "INSERT INTO video_snapshots (video_id, channel_id, view_count, like_count, comment_count, vph) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [item.id, targetChannel.id, stats.viewCount, stats.likeCount || 0, stats.commentCount || 0, vph]
-        });
       }
     }
-      } catch (err) {
-        console.error(`Failed processing channel ${targetChannel.id}:`, err);
-      }
-    }
 
-    // 4. Cleanup old Turso snapshots
+    // 4. Cleanup old Turso snapshots (> 48h)
     try {
       await turso.execute("DELETE FROM video_snapshots WHERE captured_at < datetime('now', '-48 hours')");
       console.log('Cleaned up Turso snapshots older than 48 hours');
@@ -162,9 +173,12 @@ serve(async (req) => {
       console.error('Failed to cleanup Turso:', cleanupErr);
     }
 
-    return new Response(JSON.stringify({ success: true, message: 'Processed all channels successfully' }), { headers: { "Content-Type": "application/json" } });
+    return new Response(
+      JSON.stringify({ success: true, processed: totalProcessed, errors: totalErrors }),
+      { headers: { "Content-Type": "application/json" } }
+    );
   } catch (error: any) {
     console.error('[hourly-tracker] fatal:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } })
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 })

@@ -16,21 +16,19 @@ serve(async (req) => {
       authToken: Deno.env.get('TURSO_AUTH_TOKEN') || '',
     });
 
-    // 1. Kiểm tra timezone của user để chỉ chạy scan cho các user đang ở 0h00
+    // 1. Get all users and check timezone (only run for users at midnight)
     const { data: users, error: usersErr } = await supabase.from('users').select('id, timezone');
     if (usersErr) throw usersErr;
 
-    const validUserIds = [];
-    for (const user of users) {
+    const validUserIds: string[] = [];
+    for (const user of (users || [])) {
       const tz = user.timezone || 'UTC';
-      // Lấy giờ hiện tại ở timezone của user (0-23)
       const userHour = new Intl.DateTimeFormat('en-US', {
         timeZone: tz,
         hour: '2-digit',
         hour12: false
       }).format(new Date());
       
-      // '24' là 0h00 trong chuẩn hour12: false ở một số môi trường, hoặc '00'
       if (userHour === '24' || userHour === '00') {
         validUserIds.push(user.id);
       }
@@ -40,94 +38,108 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, message: 'No users at 0:00 right now' }), { headers: { "Content-Type": "application/json" } });
     }
 
-    // 2. Fetch channels của các users đó
-    const { data: channels, error: channelsErr } = await supabase.from('channels').select('id, user_id').in('user_id', validUserIds);
-    if (channelsErr) throw channelsErr;
-
-    const channelIds = channels.map(c => c.id);
-    if (channelIds.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'No channels for valid users' }), { headers: { "Content-Type": "application/json" } });
-    }
-
-    // 3. Fetch tất cả videos từ Supabase (metadata videos)
-    const { data: videos, error: videosErr } = await supabase.from('videos').select('*').in('channel_id', channelIds);
-    if (videosErr) throw videosErr;
-
-    // Reset blacklist đầu ngày
-    await supabase.from('daily_blacklist').delete().in('channel_id', channelIds);
-    console.log(`Reset daily blacklist for ${channelIds.length} channels`);
-
-    // 4. Lọc bỏ video published_at < 2 giờ
-    const now = Date.now();
-    const validVideos = videos.filter(v => {
-      const hoursSincePublished = (now - new Date(v.published_at).getTime()) / (1000 * 60 * 60);
-      return hoursSincePublished >= 2;
-    });
-
+    // 2. For each valid user, get their channels via user_channels
     let blacklistCount = 0;
 
-    for (const video of validVideos) {
-      // 5. Lấy snapshot đầu ngày từ Turso (VPH giờ đầu tiên của ngày hôm nay)
-      // daily-scan chạy lúc 1:05, nên lấy snapshot từ 0:00 (start of day)
-      const earlySnapshotRes = await turso.execute({
-        sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? AND captured_at >= date('now') ORDER BY captured_at ASC LIMIT 1",
-        args: [video.id]
-      });
-      
-      const latestSnapshotRes = await turso.execute({
-        sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 1",
-        args: [video.id]
-      });
+    for (const userId of validUserIds) {
+      const { data: userChannels } = await supabase
+        .from('user_channels')
+        .select('channel_id')
+        .eq('user_id', userId);
 
-      if (earlySnapshotRes.rows.length === 0 || latestSnapshotRes.rows.length === 0) continue;
+      if (!userChannels || userChannels.length === 0) continue;
 
-      const early = earlySnapshotRes.rows[0];
-      const latest = latestSnapshotRes.rows[0];
+      const channelIds = userChannels.map(uc => uc.channel_id);
 
-      const viewDiff = Number(latest.view_count) - Number(early.view_count);
-      const hoursDiff = (new Date(latest.captured_at as string).getTime() - new Date(early.captured_at as string).getTime()) / (1000 * 60 * 60);
-      
-      const vph = hoursDiff > 0 ? viewDiff / hoursDiff : 0;
+      // Reset blacklist for this user's channels
+      await supabase.from('daily_blacklist').delete().in('channel_id', channelIds);
+      console.log(`Reset daily blacklist for user ${userId} (${channelIds.length} channels)`);
 
-      // Tính baseline per-video: Lấy trung bình VPH của video này trong 30 ngày qua (available days)
-      const baselineRes = await turso.execute({
-        sql: "SELECT AVG(vph) as avg_vph FROM video_snapshots WHERE video_id = ? AND vph > 0 AND captured_at >= datetime('now', '-30 days')",
-        args: [video.id]
-      });
-      const baselineVph = Number(baselineRes.rows[0]?.avg_vph || 0);
-      
-      if (baselineVph === 0) continue; // Bỏ qua nếu không có đủ data baseline
+      // Check if user has key errors — skip channels with errors
+      const { data: keyErrors } = await supabase
+        .from('api_key_errors')
+        .select('channel_id')
+        .eq('user_id', userId);
+      const errorChannelIds = new Set(keyErrors?.map(e => e.channel_id) || []);
 
-      const multiplier = 3; // Default 3x. Có thể truy vấn từ bảng user settings (nếu có).
-      const spikeRatio = vph / baselineVph;
+      // 3. Process each channel
+      for (const channelId of channelIds) {
+        if (errorChannelIds.has(channelId)) {
+          console.log(`Skipping channel ${channelId} for user ${userId} (key error)`);
+          continue;
+        }
 
-      // 6. So sánh với baseline. Nếu VPH quá thấp (blacklist)
-      // Chú ý: Spike là hiện tượng view tăng đột biến, nếu vph < baseline * multiplier thì bị blacklist?
-      // "Video VPH < baseline * multiplier -> ghi vào daily_blacklist"
-      if (vph < baselineVph * multiplier) {
-        // Ghi blacklist vào Supabase
-        await supabase.from('daily_blacklist').insert({
-          video_id: video.id,
-          channel_id: video.channel_id,
-          vph_first_hour: vph,
-          baseline_vph: baselineVph,
-          multiplier: multiplier
+        // Get all videos for this channel
+        const { data: videos } = await supabase.from('videos').select('*').eq('channel_id', channelId);
+        if (!videos || videos.length === 0) continue;
+
+        // Filter: only videos published >= 2 hours ago
+        const now = Date.now();
+        const validVideos = videos.filter(v => {
+          const hoursSincePublished = (now - new Date(v.published_at).getTime()) / (1000 * 60 * 60);
+          return hoursSincePublished >= 2;
         });
-        blacklistCount++;
+
+        for (const video of validVideos) {
+          // Get first hour VPH (snapshot from start of today)
+          const earlySnapshotRes = await turso.execute({
+            sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? AND captured_at >= date('now') ORDER BY captured_at ASC LIMIT 1",
+            args: [video.id]
+          });
+          
+          const latestSnapshotRes = await turso.execute({
+            sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 1",
+            args: [video.id]
+          });
+
+          if (earlySnapshotRes.rows.length === 0 || latestSnapshotRes.rows.length === 0) continue;
+
+          const early = earlySnapshotRes.rows[0];
+          const latest = latestSnapshotRes.rows[0];
+
+          const viewDiff = Number(latest.view_count) - Number(early.view_count);
+          const hoursDiff = (new Date(latest.captured_at as string).getTime() - new Date(early.captured_at as string).getTime()) / (1000 * 60 * 60);
+          
+          const vph = hoursDiff > 0 ? viewDiff / hoursDiff : 0;
+
+          // Baseline per-video (30 day avg)
+          const baselineRes = await turso.execute({
+            sql: "SELECT AVG(vph) as avg_vph FROM video_snapshots WHERE video_id = ? AND vph > 0 AND captured_at >= datetime('now', '-30 days')",
+            args: [video.id]
+          });
+          const baselineVph = Number(baselineRes.rows[0]?.avg_vph || 0);
+          
+          if (baselineVph === 0) continue;
+
+          const multiplier = 3;
+          const spikeRatio = vph / baselineVph;
+
+          // Video "bình thường" (not spiking) → blacklist
+          if (vph < baselineVph * multiplier) {
+            await supabase.from('daily_blacklist').insert({
+              video_id: video.id,
+              channel_id: video.channel_id,
+              vph_first_hour: vph,
+              baseline_vph: baselineVph,
+              multiplier: multiplier
+            });
+            blacklistCount++;
+          }
+
+          // Save daily video stats (chốt ngày)
+          await supabase.from('daily_video_stats').upsert({
+            video_id: video.id,
+            captured_date: new Date().toISOString().split('T')[0],
+            view_count: Number(latest.view_count)
+          });
+
+          // Update Turso snapshot with VPH data
+          await turso.execute({
+            sql: "UPDATE video_snapshots SET vph = ?, baseline_vph = ?, spike_ratio = ? WHERE video_id = ? AND captured_at = ?",
+            args: [vph, baselineVph, spikeRatio, video.id, latest.captured_at]
+          });
+        }
       }
-
-      // Lưu daily_video_stats (chốt ngày)
-      await supabase.from('daily_video_stats').upsert({
-        video_id: video.id,
-        captured_date: new Date().toISOString().split('T')[0],
-        view_count: Number(latest.view_count)
-      });
-
-      // Cập nhật lại snapshot mới nhất để lưu spike_ratio vào Turso (nếu cần)
-      await turso.execute({
-        sql: "UPDATE video_snapshots SET vph = ?, baseline_vph = ?, spike_ratio = ? WHERE video_id = ? AND captured_at = ?",
-        args: [vph, baselineVph, spikeRatio, video.id, latest.captured_at]
-      });
     }
 
     return new Response(
