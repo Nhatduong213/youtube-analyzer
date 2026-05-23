@@ -43,7 +43,7 @@ export async function addChannel(formData: FormData) {
       const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
       
       const { data, error } = await adminClient.functions.invoke('hourly-tracker', {
-        body: { minute: new Date().getMinutes() }
+        body: { channelId }
       });
       
       if (error) {

@@ -4,8 +4,7 @@ import { createClient as createLibSQLClient } from "https://esm.sh/@libsql/clien
 
 serve(async (req) => {
   try {
-    const { minute } = await req.json();
-    console.log(`Running hourly tracker for minute: ${minute}`);
+    const { minute, channelId } = await req.json();
 
     const supabase = createSupabaseClient(
       Deno.env.get('SUPABASE_URL') || '',
@@ -17,19 +16,35 @@ serve(async (req) => {
       authToken: Deno.env.get('TURSO_AUTH_TOKEN') || '',
     });
 
-    // 1. Stagger logic
-    const { data: channels, error: channelErr } = await supabase
-      .from('channels')
-      .select('id, user_id, users(youtube_key_ref)')
-      .order('created_at', { ascending: true });
+    // 1. Target resolution
+    let targetChannel;
+    
+    if (channelId) {
+      console.log(`Direct invoke for channel: ${channelId}`);
+      const { data, error: channelErr } = await supabase
+        .from('channels')
+        .select('id, user_id, users(youtube_key_ref)')
+        .eq('id', channelId)
+        .single();
+        
+      if (channelErr) throw channelErr;
+      targetChannel = data;
+    } else {
+      console.log(`Running hourly tracker for minute: ${minute}`);
+      // Stagger logic
+      const { data: channels, error: channelErr } = await supabase
+        .from('channels')
+        .select('id, user_id, users(youtube_key_ref)')
+        .order('created_at', { ascending: true });
 
-    if (channelErr) throw channelErr;
+      if (channelErr) throw channelErr;
 
-    const channelIndex = Math.floor(minute / 2);
-    const targetChannel = channels && channels.length > channelIndex ? channels[channelIndex] : null;
+      const channelIndex = Math.floor(minute / 2);
+      targetChannel = channels && channels.length > channelIndex ? channels[channelIndex] : null;
 
-    if (!targetChannel) {
-      return new Response(JSON.stringify({ success: true, message: 'No channel at this index' }), { headers: { "Content-Type": "application/json" } });
+      if (!targetChannel) {
+        return new Response(JSON.stringify({ success: true, message: 'No channel at this index' }), { headers: { "Content-Type": "application/json" } });
+      }
     }
 
     const keyRef = targetChannel.users?.youtube_key_ref;
