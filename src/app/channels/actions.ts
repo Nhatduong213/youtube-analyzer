@@ -48,6 +48,9 @@ export async function addChannel(formData: FormData) {
     });
 
   if (error) {
+    if (error.code === '23505' || error.message.includes('duplicate key')) {
+      return { success: false, error: "This channel has already been added to the system." };
+    }
     return { success: false, error: error.message };
   }
 
