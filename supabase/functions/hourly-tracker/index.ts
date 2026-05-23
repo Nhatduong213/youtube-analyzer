@@ -63,13 +63,15 @@ serve(async (req) => {
     console.log(`Processing channel: ${targetChannel.id}`);
 
     // 2. Fetch Channel Stats
-    const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${targetChannel.id}&key=${apiKey}`);
+    const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${targetChannel.id}&key=${apiKey}`);
     const channelData = await channelRes.json();
     if (channelData.items && channelData.items.length > 0) {
       const stats = channelData.items[0].statistics;
       
       // Update Supabase channel stats
       await supabase.from('channels').update({
+        title: channelData.items[0].snippet.title,
+        thumbnail_url: channelData.items[0].snippet.thumbnails?.high?.url || '',
         subscriber_count: stats.subscriberCount,
         video_count: stats.videoCount,
         view_count: stats.viewCount,
