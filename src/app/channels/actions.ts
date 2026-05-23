@@ -32,15 +32,15 @@ export async function addChannel(formData: FormData) {
   // Trigger edge function immediately to fetch real data
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (supabaseUrl && anonKey) {
-      const { data: session } = await ssrClient.auth.getSession();
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && serviceRoleKey) {
       await fetch(`${supabaseUrl}/functions/v1/hourly-tracker`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${session?.session?.access_token || anonKey}`,
+          "Authorization": `Bearer ${serviceRoleKey}`,
           "Content-Type": "application/json"
-        }
+        },
+        body: JSON.stringify({ minute: new Date().getMinutes() })
       });
     }
   } catch (err) {
