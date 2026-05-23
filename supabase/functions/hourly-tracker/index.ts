@@ -17,7 +17,7 @@ serve(async (req) => {
     });
 
     // 1. Target resolution
-    let targetChannel;
+    let targetChannels = [];
     
     if (channelId) {
       console.log(`Direct invoke for channel: ${channelId}`);
@@ -28,39 +28,41 @@ serve(async (req) => {
         .single();
         
       if (channelErr) throw channelErr;
-      targetChannel = data;
+      targetChannels = [data];
     } else {
-      console.log(`Running hourly tracker for minute: ${minute}`);
-      // Stagger logic
+      console.log(`Running hourly tracker for all channels at minute: ${minute}`);
       const { data: channels, error: channelErr } = await supabase
         .from('channels')
         .select('id, user_id, users(youtube_key_ref)')
         .order('created_at', { ascending: true });
 
       if (channelErr) throw channelErr;
-
-      const channelIndex = Math.floor(minute / 2);
-      targetChannel = channels && channels.length > channelIndex ? channels[channelIndex] : null;
-
-      if (!targetChannel) {
-        return new Response(JSON.stringify({ success: true, message: 'No channel at this index' }), { headers: { "Content-Type": "application/json" } });
-      }
+      targetChannels = channels || [];
     }
 
-    const keyRef = targetChannel.users?.youtube_key_ref;
-    if (!keyRef) {
-      throw new Error(`No YouTube API key reference for user ${targetChannel.user_id}`);
+    if (targetChannels.length === 0) {
+      return new Response(JSON.stringify({ success: true, message: 'No channels to process' }), { headers: { "Content-Type": "application/json" } });
     }
 
-    const { data: vaultData, error: vaultErr } = await supabase
-      .rpc('get_secret', { secret_name: keyRef });
+    for (const targetChannel of targetChannels) {
+      try {
+        const keyRef = targetChannel.users?.youtube_key_ref;
+        if (!keyRef) {
+          console.error(`No YouTube API key reference for user ${targetChannel.user_id}`);
+          continue;
+        }
 
-    if (vaultErr) throw vaultErr;
-    if (!vaultData) throw new Error(`Secret "${keyRef}" returned null`);
+        const { data: vaultData, error: vaultErr } = await supabase
+          .rpc('get_secret', { secret_name: keyRef });
 
-    const apiKey = vaultData;
+        if (vaultErr || !vaultData) {
+          console.error(`Secret "${keyRef}" returned null or error`, vaultErr);
+          continue;
+        }
 
-    console.log(`Processing channel: ${targetChannel.id}`);
+        const apiKey = vaultData;
+
+        console.log(`Processing channel: ${targetChannel.id}`);
 
     // 2. Fetch Channel Stats
     const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${targetChannel.id}&key=${apiKey}`);
@@ -131,8 +133,12 @@ serve(async (req) => {
         });
       }
     }
+      } catch (err) {
+        console.error(`Failed processing channel ${targetChannel.id}:`, err);
+      }
+    }
 
-    return new Response(JSON.stringify({ success: true, message: 'Processed channel successfully' }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, message: 'Processed all channels successfully' }), { headers: { "Content-Type": "application/json" } });
   } catch (error: any) {
     console.error('[hourly-tracker] fatal:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } })

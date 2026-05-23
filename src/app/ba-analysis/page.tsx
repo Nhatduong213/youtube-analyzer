@@ -16,6 +16,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   let monthlyViews = 0;
   let engagementData: any[] = [];
   let channelsList: any[] = [];
+  let topVideos: any[] = [];
   let activeChannelId = searchParams.channelId;
 
   if (user) {
@@ -60,6 +61,56 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
         })).reverse(); // Reverse để thời gian đi từ quá khứ đến hiện tại
       } catch (e) {
         console.error("Turso error:", e);
+      }
+
+      // Lấy top videos VPH (kết hợp Turso & Supabase)
+      try {
+        const rs = await turso.execute({
+          sql: `
+            SELECT video_id, vph, baseline_vph, captured_at
+            FROM (
+              SELECT video_id, vph, baseline_vph, captured_at,
+                ROW_NUMBER() OVER (PARTITION BY video_id ORDER BY captured_at DESC) as rn
+              FROM video_snapshots
+              WHERE channel_id = ?
+            )
+            WHERE rn = 1
+            ORDER BY vph DESC
+            LIMIT 20
+          `,
+          args: [activeChannelId]
+        });
+        
+        if (rs.rows.length > 0) {
+          const videoIds = rs.rows.map(row => row.video_id);
+          
+          const { data: videosData } = await supabase
+            .from('videos')
+            .select('id, title, published_at, thumbnail_url')
+            .in('id', videoIds);
+
+          if (videosData) {
+            topVideos = rs.rows.map(row => {
+              const v = videosData.find(vid => vid.id === row.video_id);
+              const baseline = Number(row.baseline_vph) || 0;
+              const vph = Number(row.vph) || 0;
+              const spike_ratio = baseline > 0 ? vph / baseline : 0;
+
+              return {
+                video_id: row.video_id,
+                title: v?.title || 'Unknown Video',
+                published_at: v?.published_at || new Date().toISOString(),
+                thumbnail_url: v?.thumbnail_url || '',
+                vph,
+                baseline_vph: baseline,
+                captured_at: row.captured_at,
+                spike_ratio
+              };
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Top videos error:", e);
       }
     }
   }
@@ -160,6 +211,46 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Video List Section */}
+      <div className="mt-12">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <Activity className="h-5 w-5 text-primary" />
+          Top Performing Videos
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {topVideos.map(video => (
+            <Card key={video.video_id as string} className="glass-card overflow-hidden flex flex-col">
+              <div className="aspect-video relative bg-muted">
+                {video.thumbnail_url ? (
+                  <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">No image</div>
+                )}
+                <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded font-medium flex items-center gap-1">
+                  <Activity className="h-3 w-3" /> {video.vph.toFixed(1)} VPH
+                </div>
+              </div>
+              <CardContent className="p-4 flex-1 flex flex-col">
+                <h3 className="font-medium text-sm line-clamp-2 mb-2" title={video.title}>{video.title}</h3>
+                <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{new Date(video.published_at).toLocaleDateString()}</span>
+                  {video.spike_ratio > 0 && (
+                    <span className="text-emerald-500 font-medium">
+                      {video.spike_ratio.toFixed(1)}x spike
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {topVideos.length === 0 && (
+            <div className="col-span-full py-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
+              No video data available for this channel yet.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
