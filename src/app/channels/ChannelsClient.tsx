@@ -107,11 +107,9 @@ export default function ChannelsClient({ initialChannels }: { initialChannels: a
               </div>
 
               <div className="mt-6 flex gap-2">
-                <Button asChild variant="secondary" className="flex-1 bg-primary/10 hover:bg-primary/20 text-primary">
-                  <Link href={`/ba-analysis?channelId=${ch.id}`}>
-                    Analyze <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
+                <Link href={`/ba-analysis?channelId=${ch.id}`} className="flex-1 inline-flex items-center justify-center rounded-md bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 text-sm font-medium transition-colors">
+                  Analyze <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
                 <Button 
                   variant="outline" 
                   size="icon" 
