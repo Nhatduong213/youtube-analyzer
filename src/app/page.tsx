@@ -1,33 +1,54 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Users, Eye, TrendingUp } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase-server";
 
-// Forcing dynamic rendering to ensure fresh data on every load
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
-  // Fetch Channel KPI (MVP: taking the first channel available)
-  const { data: channelData } = await supabase
-    .from("channels")
-    .select("subscriber_count, view_count, last_synced_at")
-    .limit(1)
-    .single();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const totalSubs = channelData?.subscriber_count || 0;
-  const totalViews = channelData?.view_count || 0;
-  
-  // Calculate if last synced is older than 2 hours
-  const lastSynced = channelData?.last_synced_at ? new Date(channelData.last_synced_at) : null;
+  let totalSubs = 0;
+  let totalViews = 0;
+  let lastSynced: Date | null = null;
+  let blacklist: any[] = [];
+
+  if (user) {
+    const { data: channels } = await supabase
+      .from("channels")
+      .select("id, subscriber_count, view_count, last_synced_at")
+      .eq("user_id", user.id);
+
+    if (channels && channels.length > 0) {
+      channels.forEach(ch => {
+        totalSubs += Number(ch.subscriber_count) || 0;
+        totalViews += Number(ch.view_count) || 0;
+        if (ch.last_synced_at) {
+          const d = new Date(ch.last_synced_at);
+          if (!lastSynced || d > lastSynced) {
+            lastSynced = d;
+          }
+        }
+      });
+
+      const channelIds = channels.map(c => c.id);
+      
+      const { data: bList } = await supabase
+        .from("daily_blacklist")
+        .select("*, videos(title)")
+        .in("channel_id", channelIds)
+        .order("detected_at", { ascending: false })
+        .limit(10);
+        
+      if (bList) {
+        blacklist = bList;
+      }
+    }
+  }
+
   const hoursSinceSync = lastSynced ? (Date.now() - lastSynced.getTime()) / (1000 * 60 * 60) : 0;
   const isSyncDelayed = hoursSinceSync > 2;
-
-  // Fetch Blacklist Data joined with Videos table
-  const { data: blacklist } = await supabase
-    .from("daily_blacklist")
-    .select("*, videos(title)")
-    .order("created_at", { ascending: false })
-    .limit(10);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -83,7 +104,7 @@ export default async function Dashboard() {
           <CardContent className="relative z-10">
             <div className="text-3xl font-bold text-gradient">Data in Turso</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Connect Turso to view this metric
+              Select a channel in BA Analysis to view
             </p>
           </CardContent>
         </Card>
@@ -107,7 +128,7 @@ export default async function Dashboard() {
                 {(!blacklist || blacklist.length === 0) && (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                      No recent blacklisted videos found.
+                      No recent blacklisted videos found across your channels.
                     </td>
                   </tr>
                 )}
@@ -125,7 +146,7 @@ export default async function Dashboard() {
                       <td className="px-6 py-4 text-destructive font-semibold">{Number(row.vph_first_hour).toLocaleString()}</td>
                       <td className="px-6 py-4">{Number(row.baseline_vph).toLocaleString()}</td>
                       <td className="px-6 py-4">{row.multiplier}x</td>
-                      <td className="px-6 py-4 text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{new Date(row.detected_at).toLocaleString()}</td>
                     </tr>
                   )
                 })}

@@ -5,50 +5,66 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DollarSign, Activity, CalendarDays } from "lucide-react";
 import EngagementChart from "./EngagementChart";
+import ChannelSelector from "./ChannelSelector";
 
 export const dynamic = 'force-dynamic';
 
-export default async function BAAnalysis() {
+export default async function BAAnalysis({ searchParams }: { searchParams: { channelId?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   let monthlyViews = 0;
   let engagementData: any[] = [];
+  let channelsList: any[] = [];
+  let activeChannelId = searchParams.channelId;
 
   if (user) {
-    // Lấy view_count của channel đầu tiên của user để tính revenue
-    const { data: channelData } = await supabase
+    // Lấy toàn bộ channel của user để hiển thị lên dropdown
+    const { data: channels } = await supabase
       .from('channels')
-      .select('view_count')
+      .select('id, title, view_count')
       .eq('user_id', user.id)
-      .limit(1)
-      .single();
-    
-    if (channelData && channelData.view_count) {
-      // Giả sử lấy trung bình 5% tổng view lịch sử làm số view tháng (cho MVP)
-      monthlyViews = Math.floor(channelData.view_count * 0.05);
+      .order('created_at', { ascending: true });
+      
+    if (channels && channels.length > 0) {
+      channelsList = channels;
+      if (!activeChannelId) {
+        activeChannelId = channels[0].id;
+      }
     }
 
-    // Lấy data snapshot biểu đồ VPH từ Turso
-    try {
-      const rs = await turso.execute(`
-        SELECT captured_at, vph, baseline_vph 
-        FROM video_snapshots 
-        ORDER BY captured_at DESC 
-        LIMIT 24
-      `);
-      
-      engagementData = rs.rows.map(row => ({
-        captured_at: new Date(row.captured_at as string).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        vph: Number(row.vph) || 0,
-        baseline_vph: Number(row.baseline_vph) || 0
-      })).reverse(); // Reverse để thời gian đi từ quá khứ đến hiện tại
-    } catch (e) {
-      console.error("Turso error:", e);
+    if (activeChannelId) {
+      const selectedChannel = channels?.find(c => c.id === activeChannelId);
+      if (selectedChannel && selectedChannel.view_count) {
+        // Giả sử lấy trung bình 5% tổng view lịch sử làm số view tháng (cho MVP)
+        monthlyViews = Math.floor(selectedChannel.view_count * 0.05);
+      }
+
+      // Lấy data snapshot biểu đồ VPH từ Turso theo channel được chọn
+      try {
+        const rs = await turso.execute({
+          sql: `
+            SELECT captured_at, vph, baseline_vph 
+            FROM video_snapshots 
+            WHERE channel_id = ?
+            ORDER BY captured_at DESC 
+            LIMIT 24
+          `,
+          args: [activeChannelId]
+        });
+        
+        engagementData = rs.rows.map(row => ({
+          captured_at: new Date(row.captured_at as string).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          vph: Number(row.vph) || 0,
+          baseline_vph: Number(row.baseline_vph) || 0
+        })).reverse(); // Reverse để thời gian đi từ quá khứ đến hiện tại
+      } catch (e) {
+        console.error("Turso error:", e);
+      }
     }
   }
 
-  // Fallback data nếu DB Turso đang trống
+  // Fallback data nếu DB Turso đang trống cho kênh này
   if (engagementData.length === 0) {
     engagementData = [
       { captured_at: "10:00", vph: 1200, baseline_vph: 1000 },
@@ -65,9 +81,13 @@ export default async function BAAnalysis() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">BA Analysis</h1>
-        <p className="text-muted-foreground mt-1">Deep dive into channel metrics and revenue estimates.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">BA Analysis</h1>
+          <p className="text-muted-foreground mt-1">Deep dive into channel metrics and revenue estimates.</p>
+        </div>
+        
+        <ChannelSelector channels={channelsList} activeId={activeChannelId || ""} />
       </div>
 
       <Tabs defaultValue="revenue" className="w-full">
