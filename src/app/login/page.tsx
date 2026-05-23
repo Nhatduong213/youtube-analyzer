@@ -1,38 +1,62 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Mail, Loader2, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
+  
+  const router = useRouter();
   const supabase = createClient();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setSuccessMessage(null);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
+    if (isSignUp) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        setError(error.message);
+      } else if (data.session) {
+        router.push("/");
+        router.refresh();
+      } else {
+        setSuccessMessage("Check your email to confirm your account before logging in.");
+      }
     } else {
-      setIsSuccess(true);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError(error.message);
+      } else {
+        router.push("/");
+        router.refresh();
+      }
     }
+    
     setIsSubmitting(false);
   };
 
@@ -42,51 +66,84 @@ export default function LoginPage() {
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/20 blur-[120px]" />
       </div>
 
-      <Card className="w-full max-w-md glass-card z-10 relative">
+      <Card className="w-full max-w-md glass-card z-10 relative border-t-4 border-t-primary">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold tracking-tight text-center">Welcome Back</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight text-center">
+            {isSignUp ? "Create an Account" : "Welcome Back"}
+          </CardTitle>
           <CardDescription className="text-center">
-            Enter your email to sign in to BA Analyzer
+            {isSignUp ? "Sign up to start tracking your channel" : "Sign in to BA Analyzer"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isSuccess ? (
+          {successMessage ? (
             <div className="flex flex-col items-center justify-center space-y-4 py-4 text-center animate-in zoom-in duration-500">
               <CheckCircle2 className="h-16 w-16 text-emerald-500" />
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold">Check your email</h3>
-                <p className="text-muted-foreground text-sm">
-                  We sent a magic link to <span className="font-medium text-foreground">{email}</span>.
-                  Click the link to sign in.
-                </p>
+                <h3 className="text-xl font-semibold">Success</h3>
+                <p className="text-muted-foreground text-sm">{successMessage}</p>
               </div>
+              <Button variant="outline" className="mt-4" onClick={() => { setIsSignUp(false); setSuccessMessage(null); }}>
+                Back to Sign In
+              </Button>
             </div>
           ) : (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="m@example.com" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required 
-                  className="bg-background/50"
-                />
+            <form onSubmit={handleAuth} className="space-y-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="m@example.com" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required 
+                    className="bg-background/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required 
+                    minLength={6}
+                    className="bg-background/50"
+                  />
+                </div>
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/20" disabled={isSubmitting}>
+
+              {error && <p className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/20">{error}</p>}
+              
+              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/20 mt-2" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Mail className="mr-2 h-4 w-4" />
+                  isSignUp ? <ArrowRight className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />
                 )}
-                Send Magic Link
+                {isSignUp ? "Sign Up" : "Sign In"}
               </Button>
             </form>
           )}
         </CardContent>
+        {!successMessage && (
+          <CardFooter className="flex justify-center border-t border-border/50 bg-muted/10 py-4">
+            <p className="text-sm text-muted-foreground">
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button 
+                type="button" 
+                onClick={() => { setIsSignUp(!isSignUp); setError(null); }} 
+                className="font-medium text-primary hover:underline hover:text-primary/80 transition-colors"
+              >
+                {isSignUp ? "Sign In" : "Sign Up"}
+              </button>
+            </p>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );
