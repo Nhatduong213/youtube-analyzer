@@ -1,0 +1,246 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.wrap { padding: 1.5rem 0; font-family: var(--font-sans); }
+.tabs { display: flex; gap: 6px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.tab { padding: 6px 14px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); font-size: 13px; cursor: pointer; background: var(--color-background-primary); color: var(--color-text-secondary); }
+.tab.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); font-weight: 500; }
+.panel { display: none; }
+.panel.active { display: block; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.75rem 1rem; }
+.metric-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+.metric-val { font-size: 22px; font-weight: 500; }
+.green { color: #3B6D11; } .amber { color: #854F0B; } .red { color: #A32D2D; } .blue { color: #185FA5; }
+.card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 12px; }
+.card.ok { border-left: 3px solid #1D9E75; border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0; }
+.card.warn { border-left: 3px solid #BA7517; border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0; }
+.card.crit { border-left: 3px solid #E24B4A; border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0; }
+.card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--border-radius-md); font-size: 11px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+.b-ok { background: #E1F5EE; color: #0F6E56; }
+.b-warn { background: #FAEEDA; color: #854F0B; }
+.b-crit { background: #FCEBEB; color: #A32D2D; }
+.b-new { background: #EEEDFE; color: #534AB7; }
+.b-info { background: #E6F1FB; color: #185FA5; }
+.title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+.body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; margin-top: 6px; }
+.body code { font-family: var(--font-mono); font-size: 12px; background: var(--color-background-secondary); padding: 1px 5px; border-radius: 4px; }
+.box { border-radius: var(--border-radius-md); padding: 0.6rem 0.875rem; margin-top: 8px; font-size: 12.5px; line-height: 1.6; }
+.box-ok { background: #E1F5EE; color: #085041; }
+.box-warn { background: #FAEEDA; color: #633806; }
+.box-crit { background: #FCEBEB; color: #501313; }
+.box-code { background: var(--color-background-secondary); font-family: var(--font-mono); font-size: 12px; color: var(--color-text-primary); white-space: pre-wrap; }
+.section-title { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin: 1.25rem 0 10px; }
+.score-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.score-label { font-size: 12px; color: var(--color-text-secondary); width: 160px; flex-shrink: 0; }
+.score-bar { flex: 1; height: 5px; background: var(--color-background-secondary); border-radius: 3px; overflow: hidden; }
+.score-fill { height: 100%; border-radius: 3px; }
+.score-val { font-size: 12px; font-weight: 500; min-width: 18px; text-align: right; color: var(--color-text-primary); }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.divider { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 10px 0; }
+</style>
+
+<div class="wrap">
+<h2 class="sr-only">Audit plan v2 — 3-layer: Live Research, Imaginative Test, Solution Optimizer</h2>
+
+<div class="summary-grid">
+  <div class="metric"><div class="metric-label">Điểm được giữ nguyên</div><div class="metric-val green">9</div></div>
+  <div class="metric"><div class="metric-label">Lỗ hổng mới phát hiện</div><div class="metric-val amber">4</div></div>
+  <div class="metric"><div class="metric-label">Critical còn lại</div><div class="metric-val red">2</div></div>
+  <div class="metric"><div class="metric-label">Cần sửa plan</div><div class="metric-val amber">4</div></div>
+  <div class="metric"><div class="metric-label">Plan tốt hơn v1</div><div class="metric-val blue">+68%</div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="go('live')">Live Research</div>
+  <div class="tab" onclick="go('test')">Imaginative Test</div>
+  <div class="tab" onclick="go('sol')">Solution Optimizer</div>
+</div>
+
+<div id="p-live" class="panel active">
+
+  <div class="section-title">Xác minh từng mục trong Plan V2</div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">CONFIRMED</span><span class="title">R-01 · Auth trong layout.tsx — plan đúng hướng nhưng thiếu một cảnh báo quan trọng</span></div>
+    <div class="body">Plan đề xuất move auth vào <code>src/app/layout.tsx</code>. Đây đúng hướng theo Next.js 16. Tuy nhiên, official Next.js docs cảnh báo: <em>Layouts không re-render khi navigate trong cùng subtree</em>. Nghĩa là auth check trong root layout chỉ chạy lần đầu — các route thay đổi sau đó không trigger lại. Cần thêm auth check trực tiếp ở từng <code>page.tsx</code> hoặc dùng Data Access Layer (DAL) pattern.</div>
+    <div class="tags"><span class="badge b-warn">Cần bổ sung vào plan</span><span class="badge b-info">nextjs.org/docs/app/guides/authentication</span></div>
+    <div class="box box-warn">Next.js docs: "Pages can be rendered without layouts — adding auth check only to layout is a security vulnerability." Auth phải đặt tại <strong>page.tsx</strong> hoặc DAL functions, không chỉ layout.</div>
+  </div>
+
+  <div class="card crit">
+    <div class="card-header"><span class="badge b-crit">CRITICAL — Plan sai</span><span class="title">R-02 · vault.secrets KHÔNG cho phép ALTER TABLE trực tiếp</span></div>
+    <div class="body">Plan thêm <code>ALTER TABLE vault.secrets ADD CONSTRAINT uq_secret_name UNIQUE (name);</code> vào migration. Đây là <strong>sai hoàn toàn</strong>. Theo Supabase Vault docs và GitHub issues: <code>vault</code> là protected schema — bạn không có quyền <code>ALTER TABLE vault.secrets</code>. Lệnh này sẽ fail với <code>ERROR: permission denied for table secrets</code>.</div>
+    <div class="tags"><span class="badge b-crit">Sửa ngay</span><span class="badge b-info">github.com/supabase/vault/issues/33</span></div>
+    <div class="box box-crit">Thực tế: <code>vault.secrets</code> đã có index <code>secrets_name_idx</code> là partial unique index trên <code>name IS NOT NULL</code>. Không thể thêm constraint mới. ON CONFLICT phải dùng: <code>ON CONFLICT ON CONSTRAINT secrets_name_idx</code> — nhưng đây cũng là bug đã report (index partial không dùng được với ON CONFLICT theo cách thông thường). Giải pháp đúng: dùng <code>vault.update_secret()</code> nếu secret đã tồn tại, hoặc upsert qua RPC wrapper riêng.</div>
+  </div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">CONFIRMED</span><span class="title">R-03 · proxy.ts codemod — đúng, nhưng tên codemod trong plan có thể sai</span></div>
+    <div class="body">Plan dùng <code>npx @next/codemod@latest rename-middleware-to-proxy .</code>. Theo nguồn khác, tên đúng là <code>npx @next/codemod@canary middleware-to-proxy .</code>. Cần verify lại trước khi chạy để tránh fail silently.</div>
+    <div class="tags"><span class="badge b-warn">Kiểm tra tên codemod</span><span class="badge b-info">authgear.com/post/nextjs-middleware-authentication</span></div>
+  </div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">CONFIRMED</span><span class="title">R-04 · Turso try/catch độc lập — plan đúng hoàn toàn</span></div>
+    <div class="body">Tách Turso cleanup thành block <code>try/catch</code> riêng với <code>console.warn</code> là pattern chuẩn. Không có gì cần bổ sung.</div>
+  </div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">CONFIRMED</span><span class="title">R-05 · CURRENT_DATE AT TIME ZONE 'UTC' — đúng</span></div>
+    <div class="body">Fix timezone cho cron cleanup chính xác. pg_cron chạy ở UTC, explicit timezone clause là cách đúng.</div>
+  </div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">CONFIRMED</span><span class="title">R-06 · INSERT ... ON CONFLICT (id) DO NOTHING cho channels — đúng</span></div>
+    <div class="body">Thay thế check-then-insert bằng atomic upsert là giải pháp đúng cho race condition. Check số rows affected để detect duplicate là pattern chuẩn.</div>
+  </div>
+
+</div>
+
+<div id="p-test" class="panel">
+
+  <div class="section-title">Imaginative Test — Scenarios chưa được cover trong Plan V2</div>
+
+  <div class="card crit">
+    <div class="card-header"><span class="badge b-crit">Critical · Phase 4</span><span class="title">T-01 · Bypass auth vẫn còn nếu auth chỉ check trong root layout</span></div>
+    <div class="body">Scenario: Attacker gửi request đến <code>/dashboard/settings</code> với RSC header <code>RSC: 1</code>. Next.js partial rendering sẽ trả về chỉ nội dung của page segment, <strong>bỏ qua layout</strong>. Auth check ở <code>app/layout.tsx</code> không được chạy. Attacker thấy nội dung protected mà không cần auth.</div>
+    <div class="box box-crit">Expected: 401. Actual: content leaked. Plan hiện tại chỉ nói "move auth vào layout" — chưa đủ. Cần auth check tại từng page.tsx hoặc DAL.</div>
+  </div>
+
+  <div class="card crit">
+    <div class="card-header"><span class="badge b-crit">Critical · Phase 5</span><span class="title">T-02 · vault upsert pattern — ON CONFLICT sẽ fail ở runtime</span></div>
+    <div class="body">Scenario: Migration chạy <code>ALTER TABLE vault.secrets ADD CONSTRAINT...</code> → fail với permission error, migration bị rollback. Sau đó <code>save_user_secret</code> RPC dùng <code>ON CONFLICT (name) DO UPDATE</code> → fail vì không có UNIQUE constraint trên non-partial index. Race condition vẫn tồn tại.</div>
+    <div class="box box-crit">Toàn bộ fix F-009 collapse ở production. Cần approach khác hoàn toàn — xem Solution Optimizer.</div>
+  </div>
+
+  <div class="card warn">
+    <div class="card-header"><span class="badge b-warn">High · Phase 6</span><span class="title">T-03 · Verification test CVE: thiếu test case quan trọng nhất</span></div>
+    <div class="body">Plan verification: "Cố tình gửi request kèm header <code>x-middleware-subrequest</code> để test bypass". Đây là test đúng hướng nhưng chưa đủ. Cần test thêm RSC partial render bypass (header <code>RSC: 1</code>), và test server action endpoint trực tiếp không qua UI, vì proxy.ts không intercept server actions nếu config sai.</div>
+    <div class="box box-warn">Bổ sung 2 test cases: (1) curl với <code>-H "RSC: 1"</code> vào protected routes, (2) POST trực tiếp đến <code>/api/server-actions</code> không kèm session cookie.</div>
+  </div>
+
+  <div class="card warn">
+    <div class="card-header"><span class="badge b-warn">High · Phase 2</span><span class="title">T-04 · Handle @username: chặn mà không resolve sẽ break UX cho 30% users</span></div>
+    <div class="body">Plan tạm thời chặn handle và hiện thông báo "nhập UC ID". Nhưng YouTube đang push users dùng handle (@username) thay vì UC ID ngày càng nhiều. Users copy URL từ YouTube → nhận được <code>@handle</code> → bị reject. Frustration cao, drop-off rate cao.</div>
+    <div class="box box-warn">Nên ưu tiên auto-resolve handle → UC ID qua YouTube Search API (<code>forHandle</code> param) ngay từ đầu, không phải "nếu cần thiết". Blocked users = churned users.</div>
+  </div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">Pass · Phase 3</span><span class="title">T-05 · baseline_vph IS NULL OR = 0 guard — đúng và đủ</span></div>
+    <div class="body">Guard clause trong Plan V2 đã cover cả NULL lẫn 0. Pass imaginative test.</div>
+  </div>
+
+  <div class="card ok">
+    <div class="card-header"><span class="badge b-ok">Pass · Phase 5</span><span class="title">T-06 · CURRENT_DATE AT TIME ZONE 'UTC' cho cron — đúng</span></div>
+    <div class="body">Timezone handling cho cleanup cron đã correct. Pass.</div>
+  </div>
+
+</div>
+
+<div id="p-sol" class="panel">
+
+  <div class="section-title">Solution Optimizer — 4 vấn đề cần sửa trong Plan V2</div>
+
+  <div class="card crit">
+    <div class="card-header"><span class="badge b-crit">S-01 · Critical</span><span class="title">Vault upsert: bỏ ALTER TABLE, dùng vault API functions</span></div>
+    <div class="body"><strong>Root cause</strong>: <code>vault.secrets</code> là protected schema, không alter được. Partial index <code>secrets_name_idx</code> không dùng được với ON CONFLICT thông thường.</div>
+    <div class="divider"></div>
+    <div class="body" style="font-weight:500; margin-bottom:8px;">Recommended: Proper fix — dùng Vault's own functions</div>
+    <div class="score-row"><span class="score-label">Time to fix</span><div class="score-bar"><div class="score-fill" style="width:80%; background:#1D9E75;"></div></div><span class="score-val">4/5</span></div>
+    <div class="score-row"><span class="score-label">Fix permanence</span><div class="score-bar"><div class="score-fill" style="width:100%; background:#1D9E75;"></div></div><span class="score-val">5/5</span></div>
+    <div class="score-row"><span class="score-label">Risk</span><div class="score-bar"><div class="score-fill" style="width:80%; background:#1D9E75;"></div></div><span class="score-val">4/5</span></div>
+    <div class="box box-code">-- Trong save_user_secret RPC, thay vì INSERT ... ON CONFLICT:
+-- 1. Check xem secret đã tồn tại chưa
+SELECT id INTO v_id FROM vault.secrets WHERE name = p_name LIMIT 1;
+-- 2. Nếu có → update, nếu không → create
+IF v_id IS NOT NULL THEN
+  PERFORM vault.update_secret(v_id, p_secret);
+ELSE
+  PERFORM vault.create_secret(p_secret, p_name);
+END IF;
+-- Không cần ALTER TABLE gì cả.</div>
+    <div class="box box-warn" style="margin-top:6px;">Xóa dòng <code>ALTER TABLE vault.secrets ADD CONSTRAINT...</code> khỏi migration — nó sẽ fail ở production.</div>
+  </div>
+
+  <div class="card crit">
+    <div class="card-header"><span class="badge b-crit">S-02 · Critical</span><span class="title">Auth: layout check KHÔNG đủ — cần DAL pattern</span></div>
+    <div class="body"><strong>Root cause</strong>: Next.js partial rendering (RSC header) có thể bypass layout. Auth check chỉ ở layout là security vulnerability.</div>
+    <div class="divider"></div>
+    <div class="score-row"><span class="score-label">Fix permanence</span><div class="score-bar"><div class="score-fill" style="width:100%; background:#1D9E75;"></div></div><span class="score-val">5/5</span></div>
+    <div class="score-row"><span class="score-label">Time to fix</span><div class="score-bar"><div class="score-fill" style="width:60%; background:#BA7517;"></div></div><span class="score-val">3/5</span></div>
+    <div class="box box-code">-- Tạo Data Access Layer: src/lib/dal.ts
+import { cache } from 'react';
+import { redirect } from 'next/navigation';
+
+export const verifySession = cache(async () => {
+  const session = await getSession(); // your session logic
+  if (!session) redirect('/login');
+  return session;
+});
+
+-- Trong MỖI page.tsx protected:
+export default async function DashboardPage() {
+  const session = await verifySession(); // throws/redirects if unauth
+  // ...
+}</div>
+    <div class="box box-warn" style="margin-top:6px;">Plan cần sửa: thay "move auth vào layout.tsx" thành "tạo <code>src/lib/dal.ts</code> với <code>verifySession()</code>, call trong từng page.tsx protected". Layout chỉ render UI shell.</div>
+  </div>
+
+  <div class="card warn">
+    <div class="card-header"><span class="badge b-warn">S-03 · High</span><span class="title">Verification plan: bổ sung 2 test cases RSC bypass</span></div>
+    <div class="body">Thêm vào Verification Plan → Security Check:</div>
+    <div class="box box-code">-- Test 1: RSC partial render bypass
+curl -H "RSC: 1" https://yourapp.com/dashboard/settings
+# Expected: redirect hoặc 401
+# Nếu trả về HTML content → auth bị bypass
+
+-- Test 2: Server Action direct POST
+curl -X POST https://yourapp.com/channels/actions \
+  -H "Content-Type: application/json" \
+  -d '{"channelId":"UCfake123"}' \
+# Expected: 401 unauthorized
+# Không được có session mà vẫn pass</div>
+  </div>
+
+  <div class="card warn">
+    <div class="card-header"><span class="badge b-warn">S-04 · High</span><span class="title">Handle @username: ưu tiên auto-resolve, không chỉ block</span></div>
+    <div class="body">Sửa Priority 3, mục 6 từ "tạm thời chặn" thành implement resolve:</div>
+    <div class="score-row" style="margin-top:8px;"><span class="score-label">Client satisfaction</span><div class="score-bar"><div class="score-fill" style="width:100%; background:#1D9E75;"></div></div><span class="score-val">5/5</span></div>
+    <div class="score-row"><span class="score-label">Time to fix</span><div class="score-bar"><div class="score-fill" style="width:60%; background:#BA7517;"></div></div><span class="score-val">3/5</span></div>
+    <div class="box box-code">-- Server Action: channels/actions.ts
+if (channelId.startsWith('@')) {
+  const res = await youtube.channels.list({
+    part: ['id'],
+    forHandle: channelId.slice(1)
+  });
+  channelId = res.data.items?.[0]?.id;
+  if (!channelId) throw new Error('Handle not found');
+}</div>
+  </div>
+
+  <div class="section-title">Thứ tự thực hiện đề xuất</div>
+  <div class="card ok">
+    <div class="body" style="line-height: 2.2;">
+      <strong>Ngay bây giờ (blocking):</strong><br>
+      S-01 — Xóa ALTER TABLE vault, viết lại save_user_secret dùng vault API<br>
+      S-02 — Tạo DAL <code>verifySession()</code>, thêm vào từng page.tsx protected<br><br>
+      <strong>Tuần này:</strong><br>
+      S-03 — Bổ sung RSC bypass test vào Verification Plan<br>
+      S-04 — Implement handle @username auto-resolve<br>
+      Kiểm tra tên codemod đúng: <code>middleware-to-proxy</code> vs <code>rename-middleware-to-proxy</code>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+function go(id) {
+  ['live','test','sol'].forEach(function(k, i) {
+    document.querySelectorAll('.tab')[i].classList.toggle('active', k === id);
+    document.getElementById('p-' + k).classList.toggle('active', k === id);
+  });
+}
+</script>

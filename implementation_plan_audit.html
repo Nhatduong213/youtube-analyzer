@@ -1,0 +1,328 @@
+
+<style>
+:root { --gap: 12px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.wrap { padding: 1.5rem 0; }
+.tabs { display: flex; gap: 6px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.tab { padding: 6px 14px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); font-size: 13px; cursor: pointer; background: var(--color-background-primary); color: var(--color-text-secondary); }
+.tab.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); font-weight: 500; }
+.panel { display: none; }
+.panel.active { display: block; }
+.section-title { font-size: 13px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+.card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: var(--gap); }
+.card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--border-radius-md); font-size: 11px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+.badge-critical { background: #FCEBEB; color: #A32D2D; }
+.badge-high { background: #FAEEDA; color: #854F0B; }
+.badge-medium { background: #E6F1FB; color: #185FA5; }
+.badge-low { background: #EAF3DE; color:--color-text-success; color: #3B6D11; }
+.badge-confirm { background: #E1F5EE; color: #0F6E56; }
+.badge-warning { background: #FAEEDA; color: #854F0B; }
+.badge-fix { background: #EEEDFE; color: #534AB7; }
+.badge-info { background: #E6F1FB; color: #185FA5; }
+.find-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+.find-body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; margin-top: 4px; }
+.find-body code { font-family: var(--font-mono); font-size: 12px; background: var(--color-background-secondary); padding: 1px 5px; border-radius: 4px; }
+.meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.sol-score { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sol-score-label { font-size: 12px; color: var(--color-text-secondary); width: 130px; flex-shrink: 0; }
+.sol-bar { flex: 1; height: 6px; background: var(--color-background-secondary); border-radius: 3px; overflow: hidden; }
+.sol-bar-fill { height: 100%; border-radius: 3px; }
+.sol-score-val { font-size: 12px; font-weight: 500; min-width: 20px; text-align: right; color: var(--color-text-primary); }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--gap); margin-bottom: 1.5rem; }
+.metric-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.75rem 1rem; }
+.metric-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+.metric-val { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+.metric-val.red { color: #A32D2D; }
+.metric-val.amber { color: #854F0B; }
+.metric-val.green { color: #3B6D11; }
+.divider { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 1rem 0; }
+.rec-box { background: var(--color-background-secondary); border-left: 3px solid #1D9E75; border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0; padding: 0.75rem 1rem; margin-top: 8px; font-size: 13px; color: var(--color-text-primary); line-height: 1.6; }
+.rec-box.warn { border-left-color: #BA7517; }
+.rec-box.danger { border-left-color: #E24B4A; }
+</style>
+
+<div class="wrap">
+<h2 class="sr-only">Báo cáo kiểm tra 3 lớp: implementation_plan.md — Live Research, Imaginative Test, Solution Optimize</h2>
+
+<div class="summary-grid">
+  <div class="metric-card">
+    <div class="metric-label">Phát hiện mới</div>
+    <div class="metric-val amber">7</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Critical</div>
+    <div class="metric-val red">2</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">High</div>
+    <div class="metric-val amber">3</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Xác nhận đúng</div>
+    <div class="metric-val green">14</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Cần sửa plan</div>
+    <div class="metric-val amber">5</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('live')">Live Research</div>
+  <div class="tab" onclick="switchTab('test')">Imaginative Test</div>
+  <div class="tab" onclick="switchTab('sol')">Solution Optimizer</div>
+</div>
+
+<div id="panel-live" class="panel active">
+  <div class="section-title">Kết quả xác minh thực tế — May 2026</div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-confirm">CONFIRMED</span>
+      <span class="find-title">R-001 · proxy.ts là thật và BẮT BUỘC trong Next.js 16</span>
+    </div>
+    <div class="find-body">
+      Next.js 16 (ra mắt Oct 2025) chính thức deprecate <code>middleware.ts</code> và đổi sang <code>proxy.ts</code>. Đây không phải report giả lập — là breaking change thật. <code>middleware.ts</code> vẫn hoạt động cho Edge Runtime nhưng deprecated và sẽ bị xóa. Next.js cung cấp codemod tự động migrate. Plan hiện tại "chờ confirm" là sai — <strong>nên rename ngay</strong>.
+    </div>
+    <div class="meta-row">
+      <span class="badge badge-fix">Action required</span>
+      <span class="badge badge-info">nextjs.org/blog/next-16</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-critical">CRITICAL CVE</span>
+      <span class="find-title">R-002 · CVE-2025-29927 — auth bypass qua middleware.ts</span>
+    </div>
+    <div class="find-body">
+      Đây là lý do thực sự cần migrate. CVE-2025-29927 (CVSS 9.1) cho phép attacker bypass toàn bộ auth trong <code>middleware.ts</code> bằng cách forge header <code>x-middleware-subrequest</code>. Ảnh hưởng Next.js &lt;15.2.3 và &lt;14.2.25. Plan hiện tại không đề cập CVE này — rủi ro rất cao nếu auth đang đặt ở middleware.
+    </div>
+    <div class="meta-row">
+      <span class="badge badge-critical">CVE CVSS 9.1</span>
+      <span class="badge badge-info">offsec.com / zscaler.com</span>
+    </div>
+    <div class="rec-box danger">Không chỉ rename file — phải chuyển auth logic ra khỏi proxy.ts, đặt vào Layout hoặc Route Handler. proxy.ts chỉ dùng cho routing/redirect, không dùng cho authentication.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-confirm">CONFIRMED</span>
+      <span class="find-title">R-003 · YouTube API: UC→UU trick đã lỗi thời — contentDetails là đúng</span>
+    </div>
+    <div class="find-body">
+      Plan đề xuất bỏ regex <code>UC→UU</code>, dùng <code>channels?part=contentDetails</code> để lấy <code>relatedPlaylists.uploads</code>. Đây là cách chính thức được Google Docs khuyến nghị. <code>HC...</code> channel IDs (Handle-based) cũng được API trả về đúng qua contentDetails. Hướng đi đúng.
+    </div>
+    <div class="meta-row">
+      <span class="badge badge-confirm">Plan đúng</span>
+      <span class="badge badge-info">developers.google.com/youtube/v3</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-warning">GAP FOUND</span>
+      <span class="find-title">R-004 · pg_cron: giới hạn 32 concurrent jobs trên Supabase</span>
+    </div>
+    <div class="find-body">
+      Supabase pg_cron v1.6.4 hỗ trợ tối đa 32 concurrent jobs, mỗi job dùng 1 DB connection. Plan thêm 2 cron jobs mới nhưng không đề cập kiểm tra connection pool. Nếu project đã có nhiều crons, có thể gây connection exhaustion. Cần space out timing và kiểm tra Observability Dashboard.
+    </div>
+    <div class="meta-row">
+      <span class="badge badge-warning">Cần bổ sung</span>
+      <span class="badge badge-info">supabase.com/docs/guides/troubleshooting/pgcron</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-warning">GAP FOUND</span>
+      <span class="find-title">R-005 · Turso cleanup trong Edge Function: thiếu error isolation</span>
+    </div>
+    <div class="find-body">
+      Plan đặt Turso cleanup vào đầu <code>daily-scan</code> / <code>hourly-tracker</code>. Nếu Turso cleanup fail (timeout, network), nó có thể block toàn bộ Edge Function. Không có error boundary rõ ràng trong kế hoạch.
+    </div>
+    <div class="meta-row">
+      <span class="badge badge-warning">Cần bổ sung try/catch</span>
+    </div>
+  </div>
+</div>
+
+<div id="panel-test" class="panel">
+  <div class="section-title">Imaginative Tester — Scenarios không được cover trong plan</div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-critical">Critical · Phase 4</span>
+      <span class="find-title">T-001 · Auth bypass vẫn tồn tại sau khi rename proxy.ts</span>
+    </div>
+    <div class="find-body">
+      Scenario: Plan rename <code>middleware.ts → proxy.ts</code> nhưng giữ nguyên auth logic bên trong. Attacker gửi request với header <code>x-middleware-subrequest: src/proxy</code> → bypass toàn bộ authentication check.
+    </div>
+    <div class="rec-box danger">Expected: 401 redirect. Actual: truy cập thẳng protected route. Plan cần explicitly move auth sang Layout server component hoặc Route Handler — không chỉ rename file.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-critical">Critical · Phase 5</span>
+      <span class="find-title">T-002 · Race condition trong save_user_secret vẫn có thể xảy ra</span>
+    </div>
+    <div class="find-body">
+      Plan dùng <code>ON CONFLICT (name) DO UPDATE</code> để fix F-009. Nhưng nếu <code>name</code> column không có UNIQUE constraint, ON CONFLICT sẽ không trigger. Không thấy plan bổ sung constraint này trong migration.
+    </div>
+    <div class="rec-box danger">Cần thêm <code>ALTER TABLE vault ADD CONSTRAINT unique_secret_name UNIQUE (name);</code> vào migration, trước ON CONFLICT clause.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-high">High · Phase 6</span>
+      <span class="find-title">T-003 · baseline_vph = NULL vs = 0 — guard clause có miss case</span>
+    </div>
+    <div class="find-body">
+      Plan thêm guard <code>baseline_vph = 0</code> để skip video mới. Nhưng video mới upload có thể có <code>baseline_vph = NULL</code> thay vì 0, tùy logic insert. Guard chỉ check <code>= 0</code> sẽ miss case NULL → vẫn bị blacklist nhầm.
+    </div>
+    <div class="rec-box warn">Guard nên là: <code>IF baseline_vph IS NULL OR baseline_vph = 0 THEN SKIP</code></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-high">High · Phase 4</span>
+      <span class="find-title">T-004 · channelId regex: custom handles @username không pass</span>
+    </div>
+    <div class="find-body">
+      Plan dùng regex <code>^UC[a-zA-Z0-9_-]{22}$</code> để validate channelId. Nhưng YouTube hiện hỗ trợ custom handles (<code>@username</code>) và các format ID khác (<code>HC...</code>). User paste handle thay vì UC ID sẽ bị reject với lỗi không rõ ràng.
+    </div>
+    <div class="rec-box warn">Cần xử lý: (1) detect nếu input là handle → resolve qua API trước khi validate, hoặc (2) hiển thị error message hướng dẫn dùng channel ID dạng UC...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-high">High · Phase 3</span>
+      <span class="find-title">T-005 · daily_blacklist cleanup: timezone mismatch</span>
+    </div>
+    <div class="find-body">
+      pg_cron chạy ở UTC. Cron job xóa blacklist "cũ hơn ngày hiện tại" có thể xóa nhầm record của ngày hôm nay nếu timezone của app khác UTC (F-011 đang fix timezone default nhưng cleanup cron chưa tính).
+    </div>
+    <div class="rec-box warn">Cleanup query cần explicit: <code>WHERE date &lt; CURRENT_DATE AT TIME ZONE 'UTC'</code> thay vì CURRENT_DATE mặc định.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-medium">Medium · Phase 2</span>
+      <span class="find-title">T-006 · Rate limiting: check "đã tồn tại" có thể bị race condition</span>
+    </div>
+    <div class="find-body">
+      Plan check channel ID tồn tại trước khi invoke Edge Function. Nếu 2 requests đến đồng thời, cả 2 đều pass check "chưa tồn tại" → duplicate invocations. Check-then-act không atomic.
+    </div>
+    <div class="rec-box warn">Cần upsert với UNIQUE constraint trên channel_id ở DB level, không chỉ application-level check.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-medium">Medium · Phase 5</span>
+      <span class="find-title">T-007 · (auth) route group: flash có thể vẫn xảy ra nếu dùng client redirect</span>
+    </div>
+    <div class="find-body">
+      Tách <code>/login</code> vào <code>(auth)</code> route group với empty layout fix được flash Sidebar. Nhưng nếu redirect tới login được thực hiện client-side (useRouter.push), Sidebar có thể render 1 frame trước khi redirect. Cần đảm bảo redirect xảy ra ở server (middleware/proxy hoặc layout server component).
+    </div>
+  </div>
+</div>
+
+<div id="panel-sol" class="panel">
+  <div class="section-title">Solution Optimizer — Ưu tiên cao nhất cần sửa trong plan</div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-critical">S-001 · Critical</span>
+      <span class="find-title">proxy.ts migration: không chỉ rename — phải move auth ra ngoài</span>
+    </div>
+    <div class="find-body">Giải pháp gốc trong plan: rename file + refactor routing. Bỏ sót CVE-2025-29927.</div>
+    <hr class="divider">
+    <div class="find-body" style="font-weight:500; margin-bottom:8px;">Recommended: Proper fix</div>
+    <div class="sol-score"><span class="sol-score-label">Time to fix</span><div class="sol-bar"><div class="sol-bar-fill" style="width:60%; background:#1D9E75;"></div></div><span class="sol-score-val">3/5</span></div>
+    <div class="sol-score"><span class="sol-score-label">Fix permanence</span><div class="sol-bar"><div class="sol-bar-fill" style="width:100%; background:#1D9E75;"></div></div><span class="sol-score-val">5/5</span></div>
+    <div class="sol-score"><span class="sol-score-label">Risk</span><div class="sol-bar"><div class="sol-bar-fill" style="width:60%; background:#BA7517;"></div></div><span class="sol-score-val">3/5</span></div>
+    <div class="sol-score"><span class="sol-score-label">Security</span><div class="sol-bar"><div class="sol-bar-fill" style="width:100%; background:#1D9E75;"></div></div><span class="sol-score-val">5/5</span></div>
+    <div class="rec-box">
+      Bước 1: Chạy <code>npx @next/codemod@latest rename-middleware-to-proxy .</code> để rename tự động.<br>
+      Bước 2: Chuyển auth check ra <code>app/layout.tsx</code> server component hoặc Route Handler — proxy.ts chỉ giữ routing/redirect.<br>
+      Bước 3: Thêm middleware blocking <code>x-middleware-subrequest</code> header ở Vercel/reverse proxy config nếu chưa upgrade Next.js version.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-high">S-002 · High</span>
+      <span class="find-title">ON CONFLICT: bổ sung UNIQUE constraint vào migration</span>
+    </div>
+    <div class="find-body">Fix F-009 không hoàn chỉnh nếu thiếu constraint. Thêm vào <code>consolidated_fixes.sql</code>:</div>
+    <div class="rec-box" style="font-family: var(--font-mono); font-size: 12px; margin-top: 8px;">
+      ALTER TABLE vault.secrets ADD CONSTRAINT uq_secret_name UNIQUE (name);<br>
+      <span style="color: var(--color-text-secondary);">-- rồi mới dùng ON CONFLICT (name) DO UPDATE</span>
+    </div>
+    <div class="sol-score" style="margin-top:12px;"><span class="sol-score-label">Time to fix</span><div class="sol-bar"><div class="sol-bar-fill" style="width:100%; background:#1D9E75;"></div></div><span class="sol-score-val">5/5</span></div>
+    <div class="sol-score"><span class="sol-score-label">Fix permanence</span><div class="sol-bar"><div class="sol-bar-fill" style="width:100%; background:#1D9E75;"></div></div><span class="sol-score-val">5/5</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-high">S-003 · High</span>
+      <span class="find-title">Guard baseline_vph: thêm NULL check</span>
+    </div>
+    <div class="rec-box" style="font-family: var(--font-mono); font-size: 12px;">
+      <span style="color: var(--color-text-secondary);">-- Thay vì:</span><br>
+      IF baseline_vph = 0 THEN ...<br>
+      <span style="color: var(--color-text-secondary);">-- Dùng:</span><br>
+      IF baseline_vph IS NULL OR baseline_vph = 0 THEN ...
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-high">S-004 · High</span>
+      <span class="find-title">Turso cleanup: wrap trong try/catch riêng biệt</span>
+    </div>
+    <div class="find-body">Không để Turso cleanup failure làm hỏng toàn bộ Edge Function run.</div>
+    <div class="rec-box" style="font-family: var(--font-mono); font-size: 12px;">
+      try {<br>
+      &nbsp;&nbsp;await cleanupOldTursoSnapshots();<br>
+      } catch (e) {<br>
+      &nbsp;&nbsp;console.warn('Turso cleanup failed, continuing:', e);<br>
+      &nbsp;&nbsp;<span style="color: var(--color-text-secondary);">// non-blocking</span><br>
+      }
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="badge badge-medium">S-005 · Medium</span>
+      <span class="find-title">Rate limiting: dùng DB-level upsert thay vì application check</span>
+    </div>
+    <div class="find-body">Đổi logic add channel sang INSERT ... ON CONFLICT (channel_id) DO NOTHING, kiểm tra rows affected để biết có duplicate không. Loại bỏ race condition hoàn toàn.</div>
+    <div class="sol-score" style="margin-top:12px;"><span class="sol-score-label">Fix permanence</span><div class="sol-bar"><div class="sol-bar-fill" style="width:100%; background:#1D9E75;"></div></div><span class="sol-score-val">5/5</span></div>
+    <div class="sol-score"><span class="sol-score-label">Time to fix</span><div class="sol-bar"><div class="sol-bar-fill" style="width:80%; background:#1D9E75;"></div></div><span class="sol-score-val">4/5</span></div>
+  </div>
+
+  <div class="card" style="border-left: 2px solid #1D9E75; border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;">
+    <div class="section-title" style="margin-bottom:8px;">Thứ tự ưu tiên thực hiện</div>
+    <div class="find-body" style="line-height: 2;">
+      <strong>Ngay bây giờ:</strong> S-001 (CVE auth bypass) → S-002 (UNIQUE constraint migration)<br>
+      <strong>Tuần này:</strong> S-003 (NULL guard) → S-004 (Turso try/catch) → S-005 (DB upsert)<br>
+      <strong>Follow-up:</strong> channelId handle resolution (T-004) · pg_cron connection audit (R-004)
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const ids = ['live', 'test', 'sol'];
+    t.classList.toggle('active', ids[i] === id);
+  });
+  document.querySelectorAll('.panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'panel-' + id);
+  });
+}
+</script>

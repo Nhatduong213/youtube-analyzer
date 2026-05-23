@@ -64,6 +64,17 @@ serve(async (req) => {
 
         console.log(`Processing channel: ${targetChannel.id}`);
 
+        // 1.5 Get today's blacklisted videos for this channel
+        const todayStart = new Date(new Date().setUTCHours(0,0,0,0)).toISOString();
+        const { data: blacklistData } = await supabase
+          .from('daily_blacklist')
+          .select('video_id')
+          .eq('channel_id', targetChannel.id)
+          .gte('detected_at', todayStart);
+        
+        const blacklistedIds = new Set(blacklistData?.map(b => b.video_id) || []);
+        console.log(`Found ${blacklistedIds.size} blacklisted videos for today`);
+
     // 2. Fetch Channel Stats
     const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${targetChannel.id}&key=${apiKey}`);
     const channelData = await channelRes.json();
@@ -92,7 +103,10 @@ serve(async (req) => {
     const uploadsPlaylistId = targetChannel.id.replace(/^UC/, 'UU');
     const playlistRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}`);
     const playlistData = await playlistRes.json();
-    const videoIds = playlistData.items?.map((item: any) => item.contentDetails.videoId).join(',') || '';
+    
+    // Filter out blacklisted videos
+    const activeItems = (playlistData.items || []).filter((item: any) => !blacklistedIds.has(item.contentDetails.videoId));
+    const videoIds = activeItems.map((item: any) => item.contentDetails.videoId).join(',') || '';
 
     if (videoIds) {
       const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds}&key=${apiKey}`);
@@ -107,6 +121,8 @@ serve(async (req) => {
           id: item.id,
           channel_id: targetChannel.id,
           title: snippet.title,
+          description: snippet.description || '',
+          tags: snippet.tags || [],
           published_at: snippet.publishedAt,
           thumbnail_url: snippet.thumbnails?.high?.url || ''
         });
@@ -136,6 +152,14 @@ serve(async (req) => {
       } catch (err) {
         console.error(`Failed processing channel ${targetChannel.id}:`, err);
       }
+    }
+
+    // 4. Cleanup old Turso snapshots
+    try {
+      await turso.execute("DELETE FROM video_snapshots WHERE captured_at < datetime('now', '-48 hours')");
+      console.log('Cleaned up Turso snapshots older than 48 hours');
+    } catch (cleanupErr) {
+      console.error('Failed to cleanup Turso:', cleanupErr);
     }
 
     return new Response(JSON.stringify({ success: true, message: 'Processed all channels successfully' }), { headers: { "Content-Type": "application/json" } });

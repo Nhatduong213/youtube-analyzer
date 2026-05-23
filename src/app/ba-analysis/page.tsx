@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DollarSign, Activity, CalendarDays } from "lucide-react";
 import EngagementChart from "./EngagementChart";
 import ChannelSelector from "./ChannelSelector";
+import { redirect } from "next/navigation";
 
 export const dynamic = 'force-dynamic';
 
@@ -13,10 +14,15 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect('/login');
+  }
+
   let monthlyViews = 0;
   let engagementData: any[] = [];
   let channelsList: any[] = [];
-  let topVideos: any[] = [];
+  let spikingVideos: any[] = [];
+  let highVphVideos: any[] = [];
   let activeChannelId = searchParams.channelId;
 
   if (user) {
@@ -90,7 +96,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
             .in('id', videoIds);
 
           if (videosData) {
-            topVideos = rs.rows.map(row => {
+            const processedVideos = rs.rows.map(row => {
               const v = videosData.find(vid => vid.id === row.video_id);
               const baseline = Number(row.baseline_vph) || 0;
               const vph = Number(row.vph) || 0;
@@ -107,6 +113,9 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
                 spike_ratio
               };
             });
+            
+            spikingVideos = processedVideos.filter(v => v.spike_ratio >= 3).sort((a, b) => b.spike_ratio - a.spike_ratio);
+            highVphVideos = processedVideos.filter(v => v.vph >= 1000).sort((a, b) => b.vph - a.vph);
           }
         }
       } catch (e) {
@@ -214,43 +223,76 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
 
       {/* Video List Section */}
       <div className="mt-12">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Activity className="h-5 w-5 text-primary" />
-          Top Performing Videos
-        </h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {topVideos.map(video => (
-            <Card key={video.video_id as string} className="glass-card overflow-hidden flex flex-col">
-              <div className="aspect-video relative bg-muted">
-                {video.thumbnail_url ? (
-                  <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">No image</div>
-                )}
-                <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded font-medium flex items-center gap-1">
-                  <Activity className="h-3 w-3" /> {video.vph.toFixed(1)} VPH
+        <Tabs defaultValue="spiking" className="w-full">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Video Analytics
+            </h2>
+            <TabsList className="bg-card/50 backdrop-blur border border-border/50">
+              <TabsTrigger value="spiking">Spiking</TabsTrigger>
+              <TabsTrigger value="high_vph">High VPH</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="spiking">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {spikingVideos.map(video => (
+                <VideoCard key={video.video_id as string} video={video} />
+              ))}
+              {spikingVideos.length === 0 && (
+                <div className="col-span-full py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
+                  No spiking videos detected for this channel (VPH &ge; 3x baseline).
                 </div>
-              </div>
-              <CardContent className="p-4 flex-1 flex flex-col">
-                <h3 className="font-medium text-sm line-clamp-2 mb-2" title={video.title}>{video.title}</h3>
-                <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{new Date(video.published_at).toLocaleDateString()}</span>
-                  {video.spike_ratio > 0 && (
-                    <span className="text-emerald-500 font-medium">
-                      {video.spike_ratio.toFixed(1)}x spike
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {topVideos.length === 0 && (
-            <div className="col-span-full py-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
-              No video data available for this channel yet.
+              )}
             </div>
-          )}
-        </div>
+          </TabsContent>
+
+          <TabsContent value="high_vph">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {highVphVideos.map(video => (
+                <VideoCard key={video.video_id as string} video={video} />
+              ))}
+              {highVphVideos.length === 0 && (
+                <div className="col-span-full py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
+                  No videos with High VPH detected (&ge; 1,000 VPH).
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
+  );
+}
+
+// Helper Component for Video Cards
+function VideoCard({ video }: { video: any }) {
+  return (
+    <Card className="glass-card overflow-hidden flex flex-col group hover:border-primary/50 transition-colors">
+      <a href={`/ba-analysis/video/${video.video_id}`} className="block aspect-video relative bg-muted overflow-hidden">
+        {video.thumbnail_url ? (
+          <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground">No image</div>
+        )}
+        <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-sm text-white text-xs px-2 py-1 rounded font-medium flex items-center gap-1">
+          <Activity className="h-3 w-3" /> {video.vph.toLocaleString(undefined, { maximumFractionDigits: 1 })} VPH
+        </div>
+      </a>
+      <CardContent className="p-4 flex-1 flex flex-col">
+        <a href={`/ba-analysis/video/${video.video_id}`} className="hover:text-primary transition-colors">
+          <h3 className="font-medium text-sm line-clamp-2 mb-3" title={video.title}>{video.title}</h3>
+        </a>
+        <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
+          <span>{new Date(video.published_at).toLocaleDateString()}</span>
+          {video.spike_ratio > 0 && (
+            <span className="text-emerald-500 font-medium bg-emerald-500/10 px-2 py-0.5 rounded">
+              {video.spike_ratio.toFixed(1)}x spike
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

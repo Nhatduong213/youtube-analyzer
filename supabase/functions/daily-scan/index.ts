@@ -53,6 +53,10 @@ serve(async (req) => {
     const { data: videos, error: videosErr } = await supabase.from('videos').select('*').in('channel_id', channelIds);
     if (videosErr) throw videosErr;
 
+    // Reset blacklist đầu ngày
+    await supabase.from('daily_blacklist').delete().in('channel_id', channelIds);
+    console.log(`Reset daily blacklist for ${channelIds.length} channels`);
+
     // 4. Lọc bỏ video published_at < 2 giờ
     const now = Date.now();
     const validVideos = videos.filter(v => {
@@ -63,9 +67,10 @@ serve(async (req) => {
     let blacklistCount = 0;
 
     for (const video of validVideos) {
-      // 5. Lấy snapshot đầu ngày từ Turso
+      // 5. Lấy snapshot đầu ngày từ Turso (VPH giờ đầu tiên của ngày hôm nay)
+      // daily-scan chạy lúc 1:05, nên lấy snapshot từ 0:00 (start of day)
       const earlySnapshotRes = await turso.execute({
-        sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? AND captured_at >= datetime('now', '-24 hours') ORDER BY captured_at ASC LIMIT 1",
+        sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? AND captured_at >= date('now') ORDER BY captured_at ASC LIMIT 1",
         args: [video.id]
       });
       
@@ -110,6 +115,13 @@ serve(async (req) => {
         });
         blacklistCount++;
       }
+
+      // Lưu daily_video_stats (chốt ngày)
+      await supabase.from('daily_video_stats').upsert({
+        video_id: video.id,
+        captured_date: new Date().toISOString().split('T')[0],
+        view_count: Number(latest.view_count)
+      });
 
       // Cập nhật lại snapshot mới nhất để lưu spike_ratio vào Turso (nếu cần)
       await turso.execute({
