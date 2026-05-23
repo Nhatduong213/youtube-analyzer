@@ -53,16 +53,12 @@ serve(async (req) => {
     }
 
     const { data: vaultData, error: vaultErr } = await supabase
-      .from('vault.decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('name', keyRef)
-      .single();
+      .rpc('get_secret', { secret_name: keyRef });
 
-    if (vaultErr || !vaultData) {
-      throw new Error(`Failed to retrieve API key from vault for user ${targetChannel.user_id}`);
-    }
+    if (vaultErr) throw vaultErr;
+    if (!vaultData) throw new Error(`Secret "${keyRef}" returned null`);
 
-    const apiKey = vaultData.decrypted_secret;
+    const apiKey = vaultData;
 
     console.log(`Processing channel: ${targetChannel.id}`);
 
@@ -125,6 +121,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, message: 'Processed channel successfully' }), { headers: { "Content-Type": "application/json" } });
   } catch (error: any) {
+    console.error('[hourly-tracker] fatal:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } })
   }
 })
