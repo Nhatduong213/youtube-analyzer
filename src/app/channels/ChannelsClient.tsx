@@ -6,7 +6,7 @@ import { addChannel, deleteChannel } from "./actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Youtube, Plus, Trash2, Loader2, ArrowRight } from "lucide-react";
+import { Tv, Plus, Trash2, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default function ChannelsClient({ initialChannels }: { initialChannels: any[] }) {
@@ -85,7 +85,7 @@ export default function ChannelsClient({ initialChannels }: { initialChannels: a
                     {ch.thumbnail_url ? (
                       <img src={ch.thumbnail_url} alt={ch.title} className="h-full w-full object-cover" />
                     ) : (
-                      <Youtube className="h-6 w-6 text-muted-foreground" />
+                      <Tv className="h-6 w-6 text-muted-foreground" />
                     )}
                   </div>
                   <div>

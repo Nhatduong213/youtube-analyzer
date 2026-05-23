@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, BarChart3, Settings, Tv, Bot, Youtube } from "lucide-react";
+import { LayoutDashboard, BarChart3, Settings, Tv, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Channels", href: "/channels", icon: Youtube },
+  { name: "Channels", href: "/channels", icon: Tv },
   { name: "BA Analysis", href: "/ba-analysis", icon: BarChart3 },
   { name: "AI Assistant", href: "/ai-assistant", icon: Bot },
   { name: "Settings", href: "/settings", icon: Settings },
