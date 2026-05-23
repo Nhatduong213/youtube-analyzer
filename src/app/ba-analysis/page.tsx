@@ -23,6 +23,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   let channelsList: any[] = [];
   let spikingVideos: any[] = [];
   let highVphVideos: any[] = [];
+  let allVideos: any[] = [];
   let activeChannelId = searchParams.channelId;
 
   if (user) {
@@ -75,16 +76,16 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
       try {
         const rs = await turso.execute({
           sql: `
-            SELECT video_id, vph, baseline_vph, captured_at
+            SELECT video_id, vph, baseline_vph, view_count, captured_at
             FROM (
-              SELECT video_id, vph, baseline_vph, captured_at,
+              SELECT video_id, vph, baseline_vph, view_count, captured_at,
                 ROW_NUMBER() OVER (PARTITION BY video_id ORDER BY captured_at DESC) as rn
               FROM video_snapshots
               WHERE channel_id = ?
             )
             WHERE rn = 1
             ORDER BY vph DESC
-            LIMIT 20
+            LIMIT 50
           `,
           args: [activeChannelId]
         });
@@ -109,6 +110,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
                 title: v?.title || 'Unknown Video',
                 published_at: v?.published_at || new Date().toISOString(),
                 thumbnail_url: v?.thumbnail_url || '',
+                view_count: Number(row.view_count) || 0,
                 vph,
                 baseline_vph: baseline,
                 captured_at: row.captured_at,
@@ -116,6 +118,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
               };
             });
             
+            allVideos = processedVideos.sort((a, b) => b.view_count - a.view_count);
             spikingVideos = processedVideos.filter(v => v.spike_ratio >= 3).sort((a, b) => b.spike_ratio - a.spike_ratio);
             highVphVideos = processedVideos.filter(v => v.vph >= 1000).sort((a, b) => b.vph - a.vph);
           }
@@ -225,17 +228,31 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
 
       {/* Video List Section */}
       <div className="mt-12">
-        <Tabs defaultValue="spiking" className="w-full">
+        <Tabs defaultValue="all" className="w-full">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
               Video Analytics
             </h2>
             <TabsList className="bg-card/50 backdrop-blur border border-border/50">
+              <TabsTrigger value="all">All Videos</TabsTrigger>
               <TabsTrigger value="spiking">Spiking</TabsTrigger>
               <TabsTrigger value="high_vph">High VPH</TabsTrigger>
             </TabsList>
           </div>
+
+          <TabsContent value="all">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {allVideos.map(video => (
+                <VideoCard key={video.video_id as string} video={video} />
+              ))}
+              {allVideos.length === 0 && (
+                <div className="col-span-full py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
+                  No video data yet. Run the hourly-tracker to fetch videos.
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           <TabsContent value="spiking">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -279,13 +296,16 @@ function VideoCard({ video }: { video: any }) {
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">No image</div>
         )}
         <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-sm text-white text-xs px-2 py-1 rounded font-medium flex items-center gap-1">
-          <Activity className="h-3 w-3" /> {video.vph.toLocaleString(undefined, { maximumFractionDigits: 1 })} VPH
+          <Activity className="h-3 w-3" /> {(video.vph || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} VPH
         </div>
       </a>
       <CardContent className="p-4 flex-1 flex flex-col">
         <a href={`/ba-analysis/video/${video.video_id}`} className="hover:text-primary transition-colors">
-          <h3 className="font-medium text-sm line-clamp-2 mb-3" title={video.title}>{video.title}</h3>
+          <h3 className="font-medium text-sm line-clamp-2 mb-2" title={video.title}>{video.title}</h3>
         </a>
+        <div className="text-xs text-muted-foreground mb-2">
+          <span className="font-semibold text-foreground">{(video.view_count || 0).toLocaleString()}</span> views
+        </div>
         <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
           <span>{new Date(video.published_at).toLocaleDateString()}</span>
           {video.spike_ratio > 0 && (
