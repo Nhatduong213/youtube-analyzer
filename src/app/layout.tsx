@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
+import { LayoutWrapper } from "@/components/LayoutWrapper";
 import Script from "next/script";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -26,12 +26,9 @@ export default function RootLayout({
           <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[oklch(0.7_0.2_180)]/10 blur-[120px]" />
         </div>
         
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-8">
-          <div className="mx-auto max-w-6xl">
-            {children}
-          </div>
-        </main>
+        <LayoutWrapper>
+          {children}
+        </LayoutWrapper>
       </body>
     </html>
   );
