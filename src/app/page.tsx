@@ -11,7 +11,7 @@ export default async function Dashboard() {
 
   let totalSubs = 0;
   let totalViews = 0;
-  let lastSynced: Date | null = null;
+  let lastSyncedTime: number = 0;
   let blacklist: any[] = [];
 
   if (user) {
@@ -25,10 +25,8 @@ export default async function Dashboard() {
         totalSubs += Number(ch.subscriber_count) || 0;
         totalViews += Number(ch.view_count) || 0;
         if (ch.last_synced_at) {
-          const d = new Date(ch.last_synced_at);
-          if (!lastSynced || d > lastSynced) {
-            lastSynced = d;
-          }
+          const t = new Date(ch.last_synced_at).getTime();
+          if (t > lastSyncedTime) lastSyncedTime = t;
         }
       });
 
@@ -47,7 +45,7 @@ export default async function Dashboard() {
     }
   }
 
-  const hoursSinceSync = lastSynced ? (Date.now() - lastSynced.getTime()) / (1000 * 60 * 60) : 0;
+  const hoursSinceSync = lastSyncedTime ? (Date.now() - lastSyncedTime) / (1000 * 60 * 60) : 0;
   const isSyncDelayed = hoursSinceSync > 2;
 
   return (
@@ -62,7 +60,7 @@ export default async function Dashboard() {
           <AlertCircle className="h-5 w-5" />
           <div className="flex flex-col">
             <span className="text-sm font-semibold">
-              {lastSynced ? `Last synced: ${Math.floor(hoursSinceSync)} hours ago` : 'Never synced'}
+              {lastSyncedTime ? `Last synced: ${Math.floor(hoursSinceSync)} hours ago` : 'Never synced'}
             </span>
             {isSyncDelayed && <span className="text-xs opacity-80">Warning: Sync delayed</span>}
           </div>
