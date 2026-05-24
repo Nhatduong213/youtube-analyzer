@@ -158,13 +158,8 @@ serve(async (req) => {
 
                 if (prevRes.rows.length > 0) {
                   const prevViews = Number(prevRes.rows[0].view_count) || 0;
-                  const prevTime = new Date(prevRes.rows[0].captured_at as string).getTime();
-                  const nowTime = Date.now();
-                  const hoursDiff = (nowTime - prevTime) / (1000 * 60 * 60);
-
-                  if (hoursDiff > 0 && hoursDiff < 24) {
-                    vph = (viewCount - prevViews) / hoursDiff;
-                  }
+                  vph = viewCount - prevViews;
+                  if (vph < 0) vph = 0;
                 }
 
                 // Calculate baseline (average VPH from history)
@@ -177,7 +172,7 @@ serve(async (req) => {
                 // Insert snapshot with VPH
                 await turso.execute({
                   sql: "INSERT INTO video_snapshots (video_id, channel_id, view_count, vph, baseline_vph, captured_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-                  args: [item.id, channelId, viewCount, Math.round(vph * 10) / 10, Math.round(baselineVph * 10) / 10]
+                  args: [item.id, channelId, viewCount, vph, Math.round(baselineVph)]
                 });
               } catch (tursoErr) {
                 console.error('Turso error:', tursoErr);
