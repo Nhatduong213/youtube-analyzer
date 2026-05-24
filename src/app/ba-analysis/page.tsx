@@ -67,20 +67,30 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
       try {
         const rs = await turso.execute({
           sql: `
-            SELECT captured_at, vph, baseline_vph 
+            SELECT 
+              strftime('%Y-%m-%d %H:00', captured_at) as hour_bucket,
+              ROUND(AVG(vph), 0) as vph,
+              ROUND(AVG(baseline_vph), 0) as baseline_vph,
+              COUNT(*) as video_count
             FROM video_snapshots 
             WHERE channel_id = ?
-            ORDER BY captured_at DESC 
-            LIMIT 24
+            GROUP BY hour_bucket
+            ORDER BY hour_bucket DESC 
+            LIMIT 48
           `,
           args: [activeChannelId]
         });
         
-        engagementData = rs.rows.map(row => ({
-          captured_at: new Date(row.captured_at as string).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          vph: Number(row.vph) || 0,
-          baseline_vph: Number(row.baseline_vph) || 0
-        })).reverse(); // Reverse để thời gian đi từ quá khứ đến hiện tại
+        engagementData = rs.rows.map(row => {
+          const hourStr = row.hour_bucket as string;
+          // Format to just HH:00
+          const timePart = hourStr.split(' ')[1] || hourStr;
+          return {
+            captured_at: timePart,
+            vph: Number(row.vph) || 0,
+            baseline_vph: Number(row.baseline_vph) || 0
+          };
+        }).reverse();
       } catch (e) {
         console.error("Turso error:", e);
       }
