@@ -1,16 +1,27 @@
 import { createClient } from "@/lib/supabase-server";
 import { turso } from "@/lib/turso";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Activity, CalendarDays } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import EngagementChart from "./EngagementChart";
 import ChannelSelector from "./ChannelSelector";
 import { redirect } from "next/navigation";
 
 export const dynamic = 'force-dynamic';
 
-export default async function BAAnalysis({ searchParams }: { searchParams: { channelId?: string } }) {
+function fmt(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return n.toLocaleString();
+}
+
+function fmtRev(views: number, cpm: number): string {
+  const e = (views / 1e3) * cpm;
+  if (e >= 1e6) return "$" + (e / 1e6).toFixed(2) + "M";
+  if (e >= 1e3) return "$" + (e / 1e3).toFixed(1) + "K";
+  return "$" + e.toFixed(0);
+}
+
+export default async function BAAnalysis({ searchParams }: { searchParams: { channelId?: string; mainTab?: string; vidTab?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -25,6 +36,8 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   let highVphVideos: any[] = [];
   let allVideos: any[] = [];
   let activeChannelId = searchParams.channelId;
+  const mainTab = searchParams.mainTab || "revenue";
+  const vidTab = searchParams.vidTab || "all";
 
   if (user) {
     // Lấy toàn bộ channel của user qua user_channels junction table
@@ -144,177 +157,218 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   const avgRev = (monthlyViews / 1000) * 3.5;
   const highRev = (monthlyViews / 1000) * 7.0;
 
+  const avgBaseline = engagementData.length > 0
+    ? Math.round(engagementData.reduce((s, d) => s + (d.baseline_vph || 0), 0) / engagementData.length)
+    : 0;
+
+  const MTABS = [
+    { id: "revenue", label: "Revenue" },
+    { id: "engagement", label: "Engagement" },
+    { id: "heatmap", label: "Upload Heatmap" },
+  ];
+
+  const VTABS = [
+    { id: "all", label: "All Videos", n: allVideos.length },
+    { id: "spiking", label: "Spiking", n: spikingVideos.length },
+    { id: "highvph", label: "High VPH", n: highVphVideos.length },
+  ];
+
+  const shownVideos = vidTab === "spiking" ? spikingVideos : vidTab === "highvph" ? highVphVideos : allVideos;
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">BA Analysis</h1>
-          <p className="text-muted-foreground mt-1">Deep dive into channel metrics and revenue estimates.</p>
+          <h1 className="text-2xl font-semibold text-white">BA Analysis</h1>
+          <p className="text-xs font-mono text-white/30 mt-0.5">
+            Business analytics · revenue estimates · VPH tracking
+          </p>
         </div>
-        
         <ChannelSelector channels={channelsList} activeId={activeChannelId || ""} />
       </div>
 
-      <Tabs defaultValue="revenue" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3 mb-8 bg-card/50 backdrop-blur border border-border/50">
-          <TabsTrigger value="revenue">Revenue</TabsTrigger>
-          <TabsTrigger value="engagement">Engagement</TabsTrigger>
-          <TabsTrigger value="heatmap">Upload Heatmap</TabsTrigger>
-        </TabsList>
+      {/* Main Tabs (pill-style) */}
+      <div className="flex gap-1 p-1 bg-white/5 border border-white/10 rounded-xl w-fit">
+        {MTABS.map(({ id, label }) => (
+          <a
+            key={id}
+            href={`/ba-analysis?channelId=${activeChannelId || ""}&mainTab=${id}&vidTab=${vidTab}`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              mainTab === id ? "bg-violet-600 text-white" : "text-white/40 hover:text-white"
+            }`}
+          >
+            {label}
+          </a>
+        ))}
+      </div>
 
-        <TabsContent value="revenue" className="space-y-6 mt-0">
-          <div className="grid gap-6 md:grid-cols-3">
-            <Card className="glass-card border-l-4 border-l-emerald-500">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Low CPM ($1.5)</CardTitle>
-                <DollarSign className="h-4 w-4 text-emerald-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">${lowRev.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                <p className="text-xs text-muted-foreground mt-1">Estimated monthly revenue</p>
-              </CardContent>
-            </Card>
+      {/* Revenue Tab */}
+      {mainTab === "revenue" && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: "Low CPM", cpm: 1.5, value: lowRev, color: "text-slate-300" },
+            { label: "Avg CPM", cpm: 3.5, value: avgRev, color: "text-violet-300" },
+            { label: "High CPM", cpm: 7.0, value: highRev, color: "text-emerald-300" },
+          ].map(({ label, cpm, value, color }) => (
+            <div
+              key={label}
+              className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5"
+            >
+              <p className="text-[10px] font-mono text-white/35 uppercase tracking-widest mb-1">
+                {label} — ${cpm}
+              </p>
+              <p className={`text-2xl font-mono font-semibold mb-1 ${color}`}>
+                {fmtRev(monthlyViews, cpm)}
+              </p>
+              <p className="text-[11px] font-mono text-white/25">
+                {fmt(monthlyViews)} views × estimated
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
-            <Card className="glass-card border-l-4 border-l-primary">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Avg CPM ($3.5)</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-gradient">${avgRev.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                  Estimated monthly revenue <Badge variant="secondary" className="text-[10px]">Recommended</Badge>
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="glass-card border-l-4 border-l-[oklch(0.7_0.2_180)]">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">High CPM ($7.0)</CardTitle>
-                <DollarSign className="h-4 w-4 text-[oklch(0.7_0.2_180)]" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">${highRev.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                <p className="text-xs text-muted-foreground mt-1">Estimated monthly revenue</p>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="engagement">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary"/> Engagement Score</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <EngagementChart data={engagementData} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="heatmap">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary"/> Upload Frequency Heatmap</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
-                Heatmap view will be available in the next iteration.
+      {/* Engagement Tab */}
+      {mainTab === "engagement" && (
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-sm font-semibold text-white">VPH — 24h Snapshot</h3>
+              <p className="text-[11px] font-mono text-white/30 mt-0.5">
+                Views Per Hour · channel performance
+              </p>
+            </div>
+            {avgBaseline > 0 && (
+              <div className="flex items-center gap-2 text-[10px] font-mono">
+                <div className="flex items-center gap-1.5 text-amber-400/70">
+                  <div className="w-4 border-t border-dashed border-amber-400/60" />
+                  Baseline {fmt(avgBaseline)} VPH
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Video List Section */}
-      <div className="mt-12">
-        <Tabs defaultValue="all" className="w-full">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              Video Analytics
-            </h2>
-            <TabsList className="bg-card/50 backdrop-blur border border-border/50">
-              <TabsTrigger value="all">All Videos</TabsTrigger>
-              <TabsTrigger value="spiking">Spiking</TabsTrigger>
-              <TabsTrigger value="high_vph">High VPH</TabsTrigger>
-            </TabsList>
+            )}
           </div>
+          <EngagementChart data={engagementData} />
+        </div>
+      )}
 
-          <TabsContent value="all">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {allVideos.map(video => (
-                <VideoCard key={video.video_id as string} video={video} />
-              ))}
-              {allVideos.length === 0 && (
-                <div className="col-span-full py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
-                  No video data yet. Run the hourly-tracker to fetch videos.
-                </div>
-              )}
-            </div>
-          </TabsContent>
+      {/* Heatmap Tab */}
+      {mainTab === "heatmap" && (
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl py-20 flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+            <AlertTriangle className="w-7 h-7 text-amber-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-white font-semibold">Upload Heatmap</p>
+            <p className="text-sm font-mono text-white/25 mt-1">Not yet implemented ⚠️</p>
+          </div>
+        </div>
+      )}
 
-          <TabsContent value="spiking">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {spikingVideos.map(video => (
-                <VideoCard key={video.video_id as string} video={video} />
-              ))}
-              {spikingVideos.length === 0 && (
-                <div className="col-span-full py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
-                  No spiking videos detected for this channel (VPH &ge; 3x baseline).
-                </div>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="high_vph">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {highVphVideos.map(video => (
-                <VideoCard key={video.video_id as string} video={video} />
-              ))}
-              {highVphVideos.length === 0 && (
-                <div className="col-span-full py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg bg-background/30">
-                  No videos with High VPH detected (&ge; 1,000 VPH).
-                </div>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+      {/* Video Analytics Section */}
+      <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl">
+        <div className="flex items-center gap-1 px-4 py-3.5 border-b border-white/10">
+          {VTABS.map(({ id, label, n }) => (
+            <a
+              key={id}
+              href={`/ba-analysis?channelId=${activeChannelId || ""}&mainTab=${mainTab}&vidTab=${id}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                vidTab === id
+                  ? "bg-white/10 text-white"
+                  : "text-white/35 hover:text-white"
+              }`}
+            >
+              {label}
+              <span
+                className={`font-mono text-[10px] ${
+                  vidTab === id ? "text-white/50" : "text-white/20"
+                }`}
+              >
+                {n}
+              </span>
+            </a>
+          ))}
+        </div>
+        <div className="divide-y divide-white/[0.05]">
+          {shownVideos.length === 0 && (
+            <p className="py-8 text-center text-sm font-mono text-white/20">
+              No videos in this filter
+            </p>
+          )}
+          {shownVideos.map((video) => (
+            <VideoCard key={video.video_id as string} video={video} />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-// Helper Component for Video Cards
+// Helper Component for Video Cards — list layout matching Figma
 function VideoCard({ video }: { video: any }) {
+  const vph = video.vph || 0;
+  const ratio = video.spike_ratio || 0;
+
+  // VPH Badge color
+  const badgeColor =
+    ratio >= 3
+      ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/25"
+      : ratio >= 1
+        ? "text-sky-400 bg-sky-400/10 border-sky-400/25"
+        : "text-red-400 bg-red-400/10 border-red-400/25";
+
   return (
-    <Card className="glass-card overflow-hidden flex flex-col group hover:border-primary/50 transition-colors">
-      <a href={`/ba-analysis/video/${video.video_id}`} className="block aspect-video relative bg-muted overflow-hidden">
-        {video.thumbnail_url ? (
-          <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">No image</div>
-        )}
-        <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-sm text-white text-xs px-2 py-1 rounded font-medium flex items-center gap-1">
-          <Activity className="h-3 w-3" /> {(video.vph || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} VPH
+    <a
+      href={`/ba-analysis/video/${video.video_id}`}
+      className="flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors"
+    >
+      {/* Thumbnail */}
+      {video.thumbnail_url ? (
+        <img
+          src={video.thumbnail_url}
+          alt={video.title}
+          className="w-24 h-14 rounded-lg object-cover flex-shrink-0 bg-white/5"
+        />
+      ) : (
+        <div className="w-24 h-14 rounded-lg flex-shrink-0 bg-white/5 flex items-center justify-center text-[10px] text-white/20 font-mono">
+          No img
         </div>
-      </a>
-      <CardContent className="p-4 flex-1 flex flex-col">
-        <a href={`/ba-analysis/video/${video.video_id}`} className="hover:text-primary transition-colors">
-          <h3 className="font-medium text-sm line-clamp-2 mb-2" title={video.title}>{video.title}</h3>
-        </a>
-        <div className="text-xs text-muted-foreground mb-2">
-          <span className="font-semibold text-foreground">{(video.view_count || 0).toLocaleString()}</span> views
-        </div>
-        <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
-          <span>{new Date(video.published_at).toLocaleDateString()}</span>
-          {video.spike_ratio > 0 && (
-            <span className="text-emerald-500 font-medium bg-emerald-500/10 px-2 py-0.5 rounded">
-              {video.spike_ratio.toFixed(1)}x spike
+      )}
+
+      {/* Info */}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-white/75 truncate mb-1.5">{video.title}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* VPH Badge */}
+          <span
+            className={`inline-block text-[10px] font-mono px-1.5 py-0.5 rounded-md border ${badgeColor}`}
+          >
+            {fmt(vph)} VPH
+          </span>
+
+          {/* Spike Tag */}
+          {ratio >= 3 && (
+            <span className="inline-block text-[10px] font-mono text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded-md">
+              ×{ratio.toFixed(2)} SPIKE
             </span>
           )}
+
+          {/* Date */}
+          <span className="text-[10px] font-mono text-white/20">
+            {new Date(video.published_at).toLocaleDateString()}
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Views */}
+      <div className="text-right flex-shrink-0 pl-4">
+        <p className="text-sm font-mono font-semibold text-white">
+          {fmt(video.view_count || 0)}
+        </p>
+        <p className="text-[9px] font-mono text-white/20 uppercase tracking-wider mt-0.5">
+          views
+        </p>
+      </div>
+    </a>
   );
 }

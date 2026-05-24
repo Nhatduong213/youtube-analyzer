@@ -1,23 +1,102 @@
 "use client";
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
+
+function fmt(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return n.toLocaleString();
+}
 
 export default function EngagementChart({ data }: { data: any[] }) {
+  // Calculate average baseline for the reference line
+  const avgBaseline =
+    data.length > 0
+      ? Math.round(data.reduce((s, d) => s + (d.baseline_vph || 0), 0) / data.length)
+      : 0;
+
   return (
-    <div className="h-[300px] w-full">
+    <div className="h-60 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-          <Line type="monotone" dataKey="vph" stroke="oklch(0.7 0.2 180)" strokeWidth={3} name="VPH" dot={{ r: 4, fill: "oklch(0.7 0.2 180)" }} activeDot={{ r: 6 }} />
-          <Line type="monotone" dataKey="baseline_vph" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" name="Baseline VPH" dot={false} />
-          <CartesianGrid stroke="#334155" strokeDasharray="5 5" vertical={false} opacity={0.5} />
-          <XAxis dataKey="captured_at" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} dy={10} />
-          <YAxis stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} axisLine={false} dx={-10} />
-          <Tooltip 
-            contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-            itemStyle={{ color: '#fff', fontWeight: 600 }}
-            labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+        <AreaChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+          <defs>
+            <linearGradient id="vphGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(255,255,255,0.05)"
+            vertical={false}
           />
-        </LineChart>
+          <XAxis
+            dataKey="captured_at"
+            tick={{
+              fill: "rgba(255,255,255,0.25)",
+              fontSize: 9,
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+            tickLine={false}
+            axisLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{
+              fill: "rgba(255,255,255,0.25)",
+              fontSize: 9,
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v: number) => fmt(v)}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "rgba(10, 8, 25, 0.96)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10,
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 11,
+            }}
+            labelStyle={{ color: "rgba(255,255,255,0.4)" }}
+            itemStyle={{ color: "#a78bfa" }}
+            formatter={(v: any) => [fmt(Number(v) || 0) + " VPH", ""]}
+          />
+          {avgBaseline > 0 && (
+            <ReferenceLine
+              y={avgBaseline}
+              stroke="#f59e0b"
+              strokeDasharray="4 3"
+              strokeOpacity={0.5}
+            />
+          )}
+          <Area
+            type="monotone"
+            dataKey="vph"
+            stroke="#8b5cf6"
+            strokeWidth={2}
+            fill="url(#vphGradient)"
+            dot={false}
+            activeDot={{
+              r: 4,
+              fill: "#8b5cf6",
+              stroke: "rgba(139,92,246,0.4)",
+              strokeWidth: 8,
+            }}
+            name="VPH"
+          />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );

@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, BarChart3, Settings, Tv, Bot } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { LayoutDashboard, Tv, BarChart3, Bot, Settings, Activity, Menu, X } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -13,56 +12,76 @@ const navigation = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function Sidebar() {
+export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-screen w-64 flex-col glass-card border-r border-y-0 border-l-0 border-border/50 bg-card/40 backdrop-blur-3xl relative z-10">
-      <div className="flex h-16 items-center gap-3 px-6 py-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-[oklch(0.7_0.2_180)] text-primary-foreground shadow-lg shadow-primary/20">
-          <Tv className="h-6 w-6" />
+    <aside
+      className={`flex-shrink-0 flex flex-col border-r border-white/10 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-56"}`}
+      style={{ background: "oklch(0.11 0.02 258)" }}
+    >
+      {/* Logo section */}
+      <div className={`flex items-center gap-3 px-4 py-5 border-b border-white/10 ${collapsed ? "justify-center" : ""}`}>
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+          <Activity className="w-4 h-4 text-white" />
         </div>
-        <span className="text-lg font-bold text-gradient">BA Analyzer</span>
+        {!collapsed && (
+          <>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-white">YT Analyzer</p>
+              <p className="text-[9px] font-mono text-white/25 uppercase tracking-wider">V14.0</p>
+            </div>
+            <button onClick={onToggle} className="p-1 text-white/20 hover:text-white/60 transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
       </div>
 
-      <nav className="flex-1 space-y-2 px-4 py-4">
+      {/* Expand toggle when collapsed */}
+      {collapsed && (
+        <button
+          onClick={onToggle}
+          className="flex items-center justify-center py-3 text-white/25 hover:text-white/60 border-b border-white/10 transition-colors"
+        >
+          <Menu className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Navigation */}
+      <nav className="flex-1 p-2 space-y-0.5">
         {navigation.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={cn(
-                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-300",
+              title={collapsed ? item.name : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${collapsed ? "justify-center" : ""} ${
                 isActive
-                  ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
+                  ? "bg-violet-600/15 text-violet-300 border border-violet-500/20"
+                  : "text-white/35 hover:text-white/70 hover:bg-white/5 border border-transparent"
+              }`}
             >
-              <item.icon
-                className={cn(
-                  "h-5 w-5 transition-transform duration-300",
-                  isActive ? "scale-110" : "group-hover:scale-110"
-                )}
-              />
-              {item.name}
+              <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+              {!collapsed && <span className="font-medium truncate">{item.name}</span>}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4">
-        <div className="rounded-xl bg-muted/30 p-4 border border-border/50">
-          <p className="text-xs text-muted-foreground">System Status</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-            </span>
-            <span className="text-sm font-medium">All systems operational</span>
-          </div>
+      {/* User section */}
+      <div className={`p-3 border-t border-white/10 flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-xs font-bold text-white">
+          U
         </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-white/50 truncate">user@example.com</p>
+            <p className="text-[9px] font-mono text-white/20">Pro plan</p>
+          </div>
+        )}
       </div>
-    </div>
+    </aside>
   );
 }

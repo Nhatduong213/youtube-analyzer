@@ -1,16 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { KeyRound, Globe, Zap, Save, Loader2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Key, Globe, SlidersHorizontal, AlertTriangle, Check } from "lucide-react";
 import { saveUserSettings } from "./actions";
 
 export default function SettingsForm() {
   const [isPending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const [mult, setMult] = useState(3);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -19,7 +16,8 @@ export default function SettingsForm() {
     startTransition(async () => {
       const res = await saveUserSettings(formData);
       if (res.success) {
-        alert("Settings saved successfully!");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2200);
       } else {
         alert("Failed to save settings: " + res.error);
       }
@@ -27,88 +25,127 @@ export default function SettingsForm() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-3xl">
+    <div className="p-6 max-w-2xl mx-auto space-y-4">
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your API keys, timezone, and algorithm preferences.</p>
+        <h1 className="text-2xl font-semibold text-white">Settings</h1>
+        <p className="text-xs font-mono text-white/30 mt-0.5">
+          API keys, timezone &amp; preferences
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid gap-6">
-        <Card className="glass-card border-t-4 border-t-primary">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <KeyRound className="h-5 w-5 text-primary" />
-              YouTube API Configuration
-            </CardTitle>
-            <CardDescription>
-              Your personal YouTube Data API v3 key. This is required for the hourly tracker to function.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input id="apiKey" name="apiKey" type="password" placeholder="AIzaSy... (Leave blank to keep current)" className="bg-background/50" />
-            </div>
-          </CardContent>
-        </Card>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* ── YouTube API Key ────────────────────────────────── */}
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Key className="w-4 h-4 text-violet-400" />
+            <h2 className="text-sm font-semibold text-white">YouTube API Key</h2>
+          </div>
+          <div>
+            <label className="text-[10px] font-mono text-white/35 uppercase tracking-widest block mb-2">
+              API Key
+            </label>
+            <input
+              type="password"
+              name="apiKey"
+              placeholder="AIzaSy... (Leave blank to keep current)"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/20 font-mono outline-none focus:border-violet-500/50 transition-colors"
+            />
+            <p className="text-[11px] font-mono text-white/20 mt-1.5">
+              Stored encrypted in Supabase Vault — key ref: yt_key_&#123;userId&#125;
+            </p>
+          </div>
+        </div>
 
-        <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Globe className="h-5 w-5 text-[oklch(0.7_0.2_180)]" />
-              Localization
-            </CardTitle>
-            <CardDescription>
-              Set your timezone so the daily scan runs correctly at 00:00 your time.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Timezone</Label>
-              <Select defaultValue="Asia/Ho_Chi_Minh" name="timezone">
-                <SelectTrigger className="bg-background/50">
-                  <SelectValue placeholder="Select timezone" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UTC">UTC (Universal Time)</SelectItem>
-                  <SelectItem value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (UTC+7)</SelectItem>
-                  <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
-                  <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        {/* ── Timezone ───────────────────────────────────────── */}
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-violet-400" />
+            <h2 className="text-sm font-semibold text-white">Timezone</h2>
+          </div>
+          <div>
+            <label className="text-[10px] font-mono text-white/35 uppercase tracking-widest block mb-2">
+              Timezone
+            </label>
+            <select
+              name="timezone"
+              defaultValue="Asia/Ho_Chi_Minh"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white outline-none appearance-none cursor-pointer focus:border-violet-500/50 transition-colors"
+            >
+              <option value="UTC" style={{ background: "#0a0819" }}>
+                UTC (Universal)
+              </option>
+              <option value="America/New_York" style={{ background: "#0a0819" }}>
+                EST (New York)
+              </option>
+              <option value="America/Los_Angeles" style={{ background: "#0a0819" }}>
+                PST (Los Angeles)
+              </option>
+              <option value="Asia/Ho_Chi_Minh" style={{ background: "#0a0819" }}>
+                ICT (Ho Chi Minh)
+              </option>
+              <option value="Europe/London" style={{ background: "#0a0819" }}>
+                GMT (London)
+              </option>
+            </select>
+            <p className="text-[11px] font-mono text-white/20 mt-1.5">
+              Controls midnight trigger for daily-scan edge function
+            </p>
+          </div>
+        </div>
 
-        <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Zap className="h-5 w-5 text-yellow-500" />
-              Algorithm Tweaks
-            </CardTitle>
-            <CardDescription>
-              Adjust how aggressive the blacklist detection is.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="spike">Spike Multiplier (2x - 10x)</Label>
-                <span className="text-sm font-bold text-primary">3.0x</span>
-              </div>
-              <Input id="spike" name="spikeMultiplier" type="range" min="2" max="10" step="0.5" defaultValue="3" className="w-full accent-primary" />
-              <p className="text-xs text-muted-foreground">
-                Videos with VPH lower than Baseline × Multiplier will be blacklisted. Default is 3x.
-              </p>
+        {/* ── Spike Multiplier ───────────────────────────────── */}
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-violet-400" />
+              <h2 className="text-sm font-semibold text-white">Spike Multiplier</h2>
             </div>
-          </CardContent>
-          <CardFooter className="bg-muted/10 border-t border-border/50 py-4 flex justify-end">
-            <Button disabled={isPending} type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-6 shadow-lg shadow-primary/20">
-              {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              {isPending ? "Saving..." : "Save Settings"}
-            </Button>
-          </CardFooter>
-        </Card>
+            <span className="text-xl font-mono font-bold text-violet-400">{mult}×</span>
+          </div>
+          <div>
+            <input
+              type="range"
+              name="spikeMultiplier"
+              min={2}
+              max={10}
+              step={0.5}
+              value={mult}
+              onChange={(e) => setMult(Number(e.target.value))}
+              className="w-full accent-violet-500 cursor-pointer"
+            />
+            <div className="flex justify-between text-[9px] font-mono text-white/20 mt-1">
+              <span>2×</span>
+              <span>10×</span>
+            </div>
+            <p className="text-[11px] font-mono text-amber-400/60 mt-3 flex items-center gap-1.5">
+              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+              Not yet saved to DB — UI only
+            </p>
+          </div>
+        </div>
+
+        {/* ── Save Button ────────────────────────────────────── */}
+        <button
+          type="submit"
+          disabled={isPending}
+          className={`w-full py-3 rounded-xl text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            saved
+              ? "bg-emerald-600 text-white"
+              : "bg-violet-600 hover:bg-violet-500 text-white"
+          }`}
+        >
+          {saved ? (
+            <>
+              <Check className="w-4 h-4" />
+              Settings Saved
+            </>
+          ) : isPending ? (
+            "Saving..."
+          ) : (
+            "Save Settings"
+          )}
+        </button>
       </form>
     </div>
   );

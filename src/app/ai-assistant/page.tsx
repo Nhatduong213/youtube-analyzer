@@ -1,10 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Bot, Send, Lock, Sparkles, FileText, User } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Lock, Zap, Bot } from "lucide-react";
 
 declare global {
   interface Window {
@@ -27,11 +24,21 @@ const mockChannelContext = {
 export default function AIAssistant() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [report, setReport] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [tab, setTab] = useState<"chatbot" | "report">("chatbot");
+
+  // Chat state
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', content: string}[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatting, setIsChatting] = useState(false);
+  const btmRef = useRef<HTMLDivElement>(null);
+
+  // Report state
+  const [report, setReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    btmRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, isChatting]);
 
   useEffect(() => {
     // Check if Puter.js is loaded
@@ -103,125 +110,222 @@ export default function AIAssistant() {
   };
 
   if (isLoading) {
-    return <div className="flex h-[50vh] items-center justify-center text-muted-foreground animate-pulse">Loading AI core...</div>;
+    return (
+      <div className="p-6 max-w-4xl mx-auto flex h-[50vh] items-center justify-center">
+        <div className="flex gap-2">
+          {[0, 0.15, 0.3].map(d => (
+            <div
+              key={d}
+              className="w-2 h-2 rounded-full bg-violet-400 animate-bounce"
+              style={{ animationDelay: `${d}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (!isSignedIn) {
     return (
-      <div className="flex flex-col h-[70vh] items-center justify-center space-y-6 animate-in fade-in zoom-in duration-700">
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 shadow-2xl shadow-primary/20">
-          <Lock className="h-10 w-10 text-primary" />
+      <div className="p-6 max-w-4xl mx-auto flex flex-col h-[70vh] items-center justify-center space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+          <Lock className="w-8 h-8 text-violet-400" />
         </div>
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Authentication Required</h1>
-          <p className="text-muted-foreground max-w-md">
-            The AI Assistant uses Puter.js to generate reports and provide insights. 
+          <h1 className="text-2xl font-semibold text-white">Authentication Required</h1>
+          <p className="text-sm font-mono text-white/30 max-w-md">
+            The AI Assistant uses Puter.js to generate reports and provide insights.
             Please sign in with your Puter account to continue.
           </p>
         </div>
-        <Button onClick={handleSignIn} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
+        <button
+          onClick={handleSignIn}
+          className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
           Sign in with Puter.js
-        </Button>
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Bot className="h-8 w-8 text-primary" />
-            AI Assistant
-          </h1>
-          <p className="text-muted-foreground mt-1">Powered by Puter.js. Context: Mock Channel Data.</p>
+          <h1 className="text-2xl font-semibold text-white">AI Assistant</h1>
+          <p className="text-xs font-mono text-white/30 mt-0.5">
+            Powered by Puter.js · Context: Mock Channel Data
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleSignOut} className="border-border/50 bg-card/50">
+        <button
+          onClick={handleSignOut}
+          className="px-3 py-1.5 text-xs font-semibold text-white/40 hover:text-white bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors"
+        >
           Sign Out
-        </Button>
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Report Generator */}
-        <div className="md:col-span-1 space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <FileText className="h-5 w-5 text-[oklch(0.7_0.2_180)]" />
-                Weekly Report
-              </CardTitle>
-              <CardDescription>Generate a comprehensive weekly BA report based on the channel's recent performance.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                onClick={generateReport} 
-                disabled={isGenerating}
-                className="w-full bg-[oklch(0.7_0.2_180)] hover:bg-[oklch(0.7_0.2_180)]/90 text-black font-semibold shadow-lg shadow-[oklch(0.7_0.2_180)]/20"
+      {/* Tab Toggle (pill-style) */}
+      <div className="flex gap-1 p-1 bg-white/5 border border-white/10 rounded-xl w-fit">
+        {(["chatbot", "report"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              tab === t ? "bg-violet-600 text-white" : "text-white/40 hover:text-white"
+            }`}
+          >
+            {t === "chatbot" ? "BA Chatbot" : "Weekly Report"}
+          </button>
+        ))}
+      </div>
+
+      {/* Chatbot Tab */}
+      {tab === "chatbot" && (
+        <div
+          className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl flex flex-col"
+          style={{ height: "calc(100vh - 310px)", minHeight: 420 }}
+        >
+          {/* Messages Area */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {chatMessages.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+                  <Bot className="w-6 h-6 text-violet-400" />
+                </div>
+                <p className="text-sm font-mono text-white/20">
+                  Start a conversation. The AI knows the channel context.
+                </p>
+              </div>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                {isGenerating ? <span className="animate-pulse flex items-center gap-2">Generating...</span> : <span className="flex items-center gap-2"><Sparkles className="h-4 w-4" /> Generate Report</span>}
-              </Button>
-
-              {report && (
-                <div className="mt-6 p-4 bg-muted/30 border border-border/50 rounded-xl text-sm whitespace-pre-wrap leading-relaxed h-[300px] overflow-y-auto">
-                  {report}
+                <div
+                  className={`max-w-[82%] text-sm leading-relaxed rounded-xl px-4 py-3 whitespace-pre-wrap ${
+                    msg.role === "user"
+                      ? "bg-violet-600 text-white rounded-br-none"
+                      : "bg-white/[0.06] border border-white/10 text-white/75 rounded-bl-none"
+                  }`}
+                >
+                  {msg.content}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            ))}
+
+            {/* Thinking dots */}
+            {isChatting && (
+              <div className="flex justify-start">
+                <div className="bg-white/[0.06] border border-white/10 rounded-xl rounded-bl-none px-4 py-3.5 flex gap-1.5">
+                  {[0, 0.15, 0.3].map(d => (
+                    <div
+                      key={d}
+                      className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
+                      style={{ animationDelay: `${d}s` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={btmRef} />
+          </div>
+
+          {/* Input Bar */}
+          <div className="border-t border-white/10 p-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendChat();
+              }}
+              className="flex gap-3"
+            >
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask about performance, revenue, spikes, or weekly summary..."
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/20 font-mono outline-none focus:border-violet-500/50 transition-colors"
+                disabled={isChatting}
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || isChatting}
+                className="p-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-35 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                <Send className="w-4 h-4 text-white" />
+              </button>
+            </form>
+          </div>
         </div>
+      )}
 
-        {/* AI Chat */}
-        <div className="md:col-span-2 h-full">
-          <Card className="glass-card flex flex-col h-[600px]">
-            <CardHeader className="border-b border-border/50 bg-muted/10 pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Bot className="h-5 w-5 text-primary" />
-                BA Chatbot
-              </CardTitle>
-              <CardDescription>Ask questions about the channel's performance, algorithms, or blacklist logic.</CardDescription>
-            </CardHeader>
-            
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-              {chatMessages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
-                  <Bot className="h-12 w-12" />
-                  <p>Start a conversation. The AI knows the channel context.</p>
-                </div>
-              )}
-              {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'ai' && <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0"><Bot className="h-4 w-4 text-primary" /></div>}
-                  <div className={`p-3 rounded-2xl max-w-[80%] text-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted/50 border border-border/50 rounded-tl-sm'}`}>
-                    {msg.content}
-                  </div>
-                  {msg.role === 'user' && <div className="h-8 w-8 rounded-full bg-muted border border-border/50 flex items-center justify-center flex-shrink-0"><User className="h-4 w-4 text-foreground" /></div>}
-                </div>
-              ))}
-              {isChatting && (
-                <div className="flex gap-3 justify-start animate-pulse">
-                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0"><Bot className="h-4 w-4 text-primary" /></div>
-                  <div className="p-3 rounded-2xl bg-muted/50 border border-border/50 text-sm">Thinking...</div>
-                </div>
-              )}
-            </CardContent>
-
-            <div className="p-4 border-t border-border/50 bg-muted/10">
-              <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} className="flex gap-2">
-                <Input 
-                  value={chatInput} 
-                  onChange={e => setChatInput(e.target.value)} 
-                  placeholder="Ask about the channel's VPH..." 
-                  className="bg-background/50 border-border/50 flex-1"
-                  disabled={isChatting}
-                />
-                <Button type="submit" size="icon" disabled={!chatInput.trim() || isChatting} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
+      {/* Weekly Report Tab */}
+      {tab === "report" && (
+        <div className="space-y-4">
+          {/* Report Controls */}
+          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
+            <div className="flex items-end gap-4 flex-wrap">
+              <div className="flex-1 min-w-40">
+                <label className="text-[10px] font-mono text-white/35 uppercase tracking-widest block mb-2">
+                  Channel
+                </label>
+                <select
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white outline-none appearance-none cursor-pointer font-mono"
+                >
+                  <option style={{ background: "#0a0819" }}>{mockChannelContext.title}</option>
+                </select>
+              </div>
+              <button
+                onClick={generateReport}
+                disabled={isGenerating}
+                className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap"
+              >
+                <Zap className="w-4 h-4" />
+                {isGenerating ? "Generating..." : "Generate Report"}
+              </button>
             </div>
-          </Card>
+          </div>
+
+          {/* Empty State */}
+          {!report && !isGenerating && (
+            <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl py-16 flex flex-col items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+                <Zap className="w-7 h-7 text-violet-400" />
+              </div>
+              <p className="text-sm font-mono text-white/25">
+                Select a channel and generate your weekly report
+              </p>
+            </div>
+          )}
+
+          {/* Generating State */}
+          {isGenerating && (
+            <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl py-16 flex flex-col items-center gap-4">
+              <div className="flex gap-2">
+                {[0, 0.15, 0.3].map(d => (
+                  <div
+                    key={d}
+                    className="w-2 h-2 rounded-full bg-violet-400 animate-bounce"
+                    style={{ animationDelay: `${d}s` }}
+                  />
+                ))}
+              </div>
+              <p className="text-sm font-mono text-white/30">Generating report...</p>
+            </div>
+          )}
+
+          {/* Report Output */}
+          {report && (
+            <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
+              <pre className="text-xs font-mono text-white/65 whitespace-pre-wrap leading-relaxed">
+                {report}
+              </pre>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
