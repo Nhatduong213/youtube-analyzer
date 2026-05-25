@@ -81,6 +81,22 @@ serve(async (req) => {
         });
 
         for (const video of validVideos) {
+          const publishedAt = new Date(video.published_at).getTime();
+          const hoursOld = (Date.now() - publishedAt) / (1000 * 60 * 60);
+
+          // Failsafe: If older than 48 hours, keep it blacklisted and skip Turso check
+          if (hoursOld > 48) {
+            await supabase.from('daily_blacklist').insert({
+              video_id: video.id,
+              channel_id: video.channel_id,
+              vph_first_hour: 0,
+              baseline_vph: 0,
+              multiplier: 3
+            });
+            blacklistCount++;
+            continue;
+          }
+
           // Get first hour VPH (snapshot from start of today)
           const earlySnapshotRes = await turso.execute({
             sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? AND captured_at >= date('now') ORDER BY captured_at ASC LIMIT 1",

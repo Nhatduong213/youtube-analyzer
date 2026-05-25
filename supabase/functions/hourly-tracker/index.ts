@@ -217,6 +217,24 @@ async function processAllChannels(body: any) {
               }, { onConflict: 'id' });
               if (upsertErr) console.error(`[upsert] ${item.id}:`, upsertErr.message);
 
+              const publishedAt = new Date(vSnippet.publishedAt).getTime();
+              const hoursOld = (Date.now() - publishedAt) / (1000 * 60 * 60);
+
+              // Failsafe: If older than 48 hours, blacklist immediately to save API quota and skip tracking
+              if (hoursOld > 48) {
+                if (!blacklistedIds.has(item.id)) {
+                  await supabase.from('daily_blacklist').insert({
+                    video_id: item.id,
+                    channel_id: channelId,
+                    vph_first_hour: 0,
+                    baseline_vph: 0,
+                    multiplier: 3
+                  });
+                  blacklistedIds.add(item.id);
+                }
+                continue; // Skip VPH calculation and snapshot creation
+              }
+
               // Calculate VPH by comparing with previous snapshot
               const viewCount = safeInt(vStats?.viewCount);
               let vph = 0;
