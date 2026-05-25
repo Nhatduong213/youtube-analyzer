@@ -279,7 +279,11 @@ async function processAllChannels(body: any) {
       console.error('[tracker] quota exhausted until', reset.toISOString());
     } else { throw err; }
   } finally {
-    await supabase.rpc('release_tracker_lock').catch(() => {});
+    try {
+      await supabase.rpc('release_tracker_lock');
+    } catch (e) {
+      console.error('Failed to release tracker lock:', e);
+    }
   }
 }
 
