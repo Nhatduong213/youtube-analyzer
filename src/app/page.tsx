@@ -1,6 +1,7 @@
 import { AlertTriangle, Users, Eye, Clock, Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { triggerSyncingFailsafe } from "./channels/actions";
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,9 @@ export default async function Dashboard() {
 
   // Ensure user profile exists in public.users table
   await supabase.from('users').upsert({ id: user.id });
+
+  // Run syncing failsafe in the background
+  triggerSyncingFailsafe().catch((e) => console.error("Failsafe run error:", e));
 
   let totalSubs = 0;
   let totalViews = 0;

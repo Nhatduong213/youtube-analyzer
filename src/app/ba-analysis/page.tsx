@@ -6,6 +6,7 @@ import EngagementChart from "./EngagementChart";
 import ChannelSelector from "./ChannelSelector";
 import VideoList from "./VideoList";
 import { Trophy, Heart, MessageCircle, Eye, Tv, Activity, TrendingUp } from "lucide-react";
+import { triggerSyncingFailsafe } from "../channels/actions";
 import {
   LATEST_SNAPSHOTS_SQL,
   VPH_CHART_SQL,
@@ -29,6 +30,9 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
 
   // Ensure user profile exists in public.users table
   await supabase.from('users').upsert({ id: user.id });
+
+  // Run syncing failsafe in the background
+  triggerSyncingFailsafe().catch((e) => console.error("Failsafe run error:", e));
 
   // Channel list for selector
   let channelsList: any[] = [];
