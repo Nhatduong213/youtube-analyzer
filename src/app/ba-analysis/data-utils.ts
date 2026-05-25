@@ -91,13 +91,22 @@ ORDER BY s.vph DESC;
 // SUM(vph) = total channel VPH across all active videos
 // Label in UI: "Channel VPH (all active videos)"
 export const VPH_CHART_SQL = `
-SELECT
-  strftime('%Y-%m-%dT%H:00:00', captured_at) AS hour,
-  SUM(vph) AS total_vph,
-  COUNT(DISTINCT video_id) AS video_count
-FROM video_snapshots
-WHERE channel_id = ?
-  AND captured_at >= datetime('now', '-48 hours')
+WITH RankedSnapshots AS (
+  SELECT video_id, vph,
+         strftime('%Y-%m-%dT%H:00:00', captured_at) AS hour_bucket,
+         ROW_NUMBER() OVER (
+           PARTITION BY video_id, strftime('%Y-%m-%dT%H:00:00', captured_at)
+           ORDER BY captured_at DESC
+         ) as rn
+  FROM video_snapshots
+  WHERE channel_id = ?
+    AND captured_at >= datetime('now', '-48 hours')
+)
+SELECT hour_bucket AS hour,
+       SUM(vph) AS total_vph,
+       COUNT(DISTINCT video_id) AS video_count
+FROM RankedSnapshots
+WHERE rn = 1
 GROUP BY hour
 ORDER BY hour;
 `;

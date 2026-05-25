@@ -59,9 +59,9 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   let topPerformer: MergedVideo | null = null;
 
   if (activeChannelId) {
-    const FETCH_NAMES = ['vph-chart', 'all-videos-vph', 'blacklist'] as const;
+    const FETCH_NAMES = ['vph-chart', 'all-videos-vph'] as const;
 
-    const [chartResult, videosResult, blacklistResult] = await Promise.allSettled([
+    const [chartResult, videosResult] = await Promise.allSettled([
       // 1. VPH Chart data
       turso.execute({ sql: VPH_CHART_SQL, args: [activeChannelId] }),
 
@@ -87,19 +87,10 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
           videosData || []
         );
       })(),
-
-      // 3. Blacklisted video IDs
-      (async () => {
-        const { data: bl } = await supabase
-          .from('daily_blacklist')
-          .select('video_id')
-          .eq('channel_id', activeChannelId!);
-        return new Set(bl?.map(b => b.video_id) || []);
-      })(),
     ]);
 
     // Named error logging
-    [chartResult, videosResult, blacklistResult].forEach((r, i) => {
+    [chartResult, videosResult].forEach((r, i) => {
       if (r.status === 'rejected') {
         const msg = r.reason instanceof Error ? r.reason.message : JSON.stringify(r.reason);
         console.error(`[${FETCH_NAMES[i]}] channelId=${activeChannelId}:`, msg);
@@ -115,11 +106,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
       }));
     }
 
-    const allVideos = videosResult.status === 'fulfilled' ? videosResult.value : [];
-    const blacklistedIds = blacklistResult.status === 'fulfilled' ? blacklistResult.value : new Set<string>();
-
-    // Filter: remove blacklisted
-    activeVideos = allVideos.filter(v => !blacklistedIds.has(v.video_id));
+    activeVideos = videosResult.status === 'fulfilled' ? videosResult.value : [];
 
     // Top performer: highest VPH non-short video
     topPerformer = activeVideos.find(v => !v.is_short) || null;

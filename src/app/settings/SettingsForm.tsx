@@ -89,7 +89,7 @@ export default function SettingsForm() {
               </option>
             </select>
             <p className="text-[11px] font-mono text-white/20 mt-1.5">
-              Controls midnight trigger for daily-scan edge function
+              Used for localized daily analytics resets
             </p>
           </div>
         </div>

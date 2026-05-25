@@ -36,14 +36,15 @@ export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
   const isChannelChart = data[0].hour !== undefined;
 
   // Normalize data for chart
-  const chartData = data.map(d => ({
-    time: isChannelChart
-      ? (d.hour?.split('T')[1]?.slice(0, 5) || d.hour || '')
-      : (d.captured_at || ''),
-    vph: isChannelChart ? (d.total_vph || 0) : (d.vph || 0),
-    baseline: isChannelChart ? 0 : (d.baseline_vph || 0),
-    videoCount: d.video_count || 0,
-  }));
+  const chartData = data.map(d => {
+    const rawTime = isChannelChart ? (d.hour || '') : (d.captured_at || '');
+    return {
+      rawTime,
+      vph: isChannelChart ? (d.total_vph || 0) : (d.vph || 0),
+      baseline: isChannelChart ? 0 : (d.baseline_vph || 0),
+      videoCount: d.video_count || 0,
+    };
+  });
 
   // Calculate average for reference line
   const avgVph = Math.round(
@@ -71,7 +72,7 @@ export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
             vertical={false}
           />
           <XAxis
-            dataKey="time"
+            dataKey="rawTime"
             tick={{
               fill: "rgba(255,255,255,0.25)",
               fontSize: 9,
@@ -80,6 +81,18 @@ export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
             tickLine={false}
             axisLine={false}
             interval="preserveStartEnd"
+            tickFormatter={(tick) => {
+              if (!tick) return '';
+              try {
+                // Ensure correct local time conversion on browser
+                const date = new Date(tick.includes('T') ? tick : tick.replace(' ', 'T') + 'Z');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                return `${hours}:${minutes}`;
+              } catch {
+                return tick;
+              }
+            }}
           />
           <YAxis
             tick={{
@@ -101,6 +114,17 @@ export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
             }}
             labelStyle={{ color: "rgba(255,255,255,0.4)" }}
             itemStyle={{ color: "#a78bfa" }}
+            labelFormatter={(labelValue) => {
+              if (!labelValue) return '';
+              try {
+                const date = new Date(labelValue.includes('T') ? labelValue : labelValue.replace(' ', 'T') + 'Z');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                return `${hours}:${minutes}`;
+              } catch {
+                return labelValue;
+              }
+            }}
             formatter={(value: any, _name: any, props: any) => {
               const vph = fmt(Number(value) || 0) + " VPH";
               const vc = props?.payload?.videoCount;

@@ -9,7 +9,7 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jet
 
 export const metadata: Metadata = {
   title: "YouTube BA Analyzer",
-  description: "Advanced YouTube Tracking & Blacklist Logic",
+  description: "Advanced YouTube Tracking & Analytics",
 };
 
 export default function RootLayout({

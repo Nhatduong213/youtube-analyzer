@@ -54,7 +54,6 @@ export default async function Dashboard() {
   let totalSubs = 0;
   let totalViews = 0;
   let lastSyncedTime: number = 0;
-  let blacklist: any[] = [];
 
   // Query user channels & API key errors in parallel to reduce database latency
   const [userChannelsResult, keyErrorsResult] = await Promise.all([
@@ -82,19 +81,6 @@ export default async function Dashboard() {
         if (t > lastSyncedTime) lastSyncedTime = t;
       }
     });
-
-    const channelIds = channels.map((c: any) => c.id);
-    
-    const { data: bList } = await supabase
-      .from("daily_blacklist")
-      .select("*, videos(title)")
-      .in("channel_id", channelIds)
-      .order("detected_at", { ascending: false })
-      .limit(10);
-      
-    if (bList) {
-      blacklist = bList;
-    }
   }
 
   const syncMins = lastSyncedTime ? Math.floor((Date.now() - lastSyncedTime) / 6e4) : 0;
@@ -174,42 +160,6 @@ export default async function Dashboard() {
               <Activity className="w-4 h-4 text-white/35" />
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Blacklisted Videos */}
-      <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10">
-          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <h2 className="text-sm font-semibold text-white">Blacklisted Videos</h2>
-          <span className="ml-auto text-[10px] font-mono text-red-400 bg-red-400/10 border border-red-400/20 px-2 py-0.5 rounded">
-            {blacklist.length} today
-          </span>
-        </div>
-        <div className="divide-y divide-white/[0.05]">
-          {(!blacklist || blacklist.length === 0) && (
-            <p className="py-8 text-center text-sm font-mono text-white/20">No blacklisted videos today</p>
-          )}
-          {blacklist?.map((row: any, idx: number) => {
-            const videoTitle = Array.isArray(row.videos) ? row.videos[0]?.title : row.videos?.title;
-            const ratio = Number(row.multiplier) || 0;
-            const vph = Number(row.vph_first_hour) || 0;
-
-            return (
-              <div key={idx} className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-white/75 truncate">{videoTitle || "Unknown Title"}</p>
-                  <p className="text-[11px] font-mono text-white/25 mt-0.5">
-                    {row.video_id} · {new Date(row.detected_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <VphBadge vph={vph} ratio={ratio} />
-                  <span className="text-xs font-mono text-red-400 w-14 text-right">×{ratio.toFixed(2)}</span>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 

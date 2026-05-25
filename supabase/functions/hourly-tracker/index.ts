@@ -115,16 +115,6 @@ async function processAllChannels(body: any) {
       const { data: userChannels, error: ucErr } = await channelsQuery;
       if (ucErr || !userChannels || userChannels.length === 0) continue;
 
-      // Get today's blacklisted videos for this user's channels
-      const todayStart = new Date(new Date().setUTCHours(0,0,0,0)).toISOString();
-      const channelIds = userChannels.map(uc => uc.channel_id);
-      const { data: blacklistData } = await supabase
-        .from('daily_blacklist')
-        .select('video_id')
-        .in('channel_id', channelIds)
-        .gte('detected_at', todayStart);
-      const blacklistedIds = new Set(blacklistData?.map(b => b.video_id) || []);
-
       // 3. Process each channel with this user's key
       for (const uc of userChannels) {
         const channelId = uc.channel_id;
@@ -176,17 +166,82 @@ async function processAllChannels(body: any) {
             last_synced_at: new Date().toISOString()
           }).eq('id', channelId);
 
-          // Fetch videos
+          // Fetch videos (with pagination to get all videos of the channel)
           const uploadsPlaylistId = channelId.replace(/^UC/, 'UU');
-          const playlistRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}`);
-          const playlistData = await playlistRes.json();
+          const videoIdsList: string[] = [];
+          let nextPageToken = "";
 
-          // Filter out blacklisted videos
-          const activeItems = (playlistData.items || []).filter((item: any) => !blacklistedIds.has(item.contentDetails.videoId));
-          const videoIdsList = activeItems.map((item: any) => item.contentDetails.videoId) || [];
+          do {
+            const playlistUrl = `https://www.googleapis.com/youtube/v3/playlistItems` +
+              `?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}` +
+              (nextPageToken ? `&pageToken=${nextPageToken}` : "");
+
+            const playlistRes = await fetch(playlistUrl);
+            if (!playlistRes.ok) {
+              console.error(`Failed to fetch playlist items: ${playlistRes.status}`);
+              break;
+            }
+
+            const playlistData = await playlistRes.json();
+            const items = playlistData.items || [];
+            for (const item of items) {
+              if (item.contentDetails?.videoId) {
+                videoIdsList.push(item.contentDetails.videoId);
+              }
+            }
+
+            nextPageToken = playlistData.nextPageToken || "";
+          } while (nextPageToken);
 
           if (videoIdsList.length > 0) {
             const videoItems = await fetchVideoDetails(videoIdsList, apiKey);
+
+            // 1. Fetch all latest snapshots and baseline averages in a single batch query (read mode)
+            const prevSnapshotsMap = new Map<string, number>();
+            const baselineMap = new Map<string, number>();
+            try {
+              const batchRes = await turso.batch([
+                {
+                  sql: `
+                    SELECT s.video_id, s.view_count
+                    FROM video_snapshots s
+                    INNER JOIN (
+                      SELECT video_id, MAX(captured_at) as max_cap 
+                      FROM video_snapshots 
+                      WHERE channel_id = ? 
+                      GROUP BY video_id
+                    ) m ON s.video_id = m.video_id AND s.captured_at = m.max_cap
+                  `,
+                  args: [channelId]
+                },
+                {
+                  sql: `
+                    SELECT video_id, AVG(vph) as avg_vph 
+                    FROM video_snapshots 
+                    WHERE channel_id = ? AND vph > 0 
+                    GROUP BY video_id
+                  `,
+                  args: [channelId]
+                }
+              ], "read");
+
+              const prevRes = batchRes[0];
+              const baseRes = batchRes[1];
+
+              for (const row of prevRes.rows) {
+                prevSnapshotsMap.set(row.video_id as string, Number(row.view_count) || 0);
+              }
+              for (const row of baseRes.rows) {
+                baselineMap.set(row.video_id as string, Number(row.avg_vph) || 0);
+              }
+            } catch (err) {
+              console.error(`Failed to batch read snapshots & baselines for channel ${channelId}:`, err);
+            }
+
+            const videosToUpsert: any[] = [];
+            const dailyStatsToUpsert: any[] = [];
+            const snapshotsToInsert: any[] = [];
+            const todayStr = new Date().toISOString().split('T')[0];
 
             for (const item of videoItems) {
               const vSnippet = item.snippet;
@@ -200,8 +255,10 @@ async function processAllChannels(body: any) {
               const isTitleShort = durationSecs === 0 && /#shorts?\b/i.test(vSnippet.title ?? '');
               const isShort = isDurationShort || isTitleShort;
 
-              // Upsert video to Supabase (shared)
-              const { error: upsertErr } = await supabase.from('videos').upsert({
+              const viewCount = safeInt(vStats?.viewCount);
+
+              // Add to batch Supabase videos
+              videosToUpsert.push({
                 id: item.id,
                 channel_id: channelId,
                 title: vSnippet.title,
@@ -211,62 +268,64 @@ async function processAllChannels(body: any) {
                 thumbnail_url: vSnippet.thumbnails?.high?.url || vSnippet.thumbnails?.medium?.url || vSnippet.thumbnails?.default?.url || '',
                 like_count: safeInt(vStats?.likeCount),
                 comment_count: safeInt(vStats?.commentCount),
-                view_count: safeInt(vStats?.viewCount),
+                view_count: viewCount,
                 duration,
                 is_short: isShort
-              }, { onConflict: 'id' });
-              if (upsertErr) console.error(`[upsert] ${item.id}:`, upsertErr.message);
+              });
 
-              const publishedAt = new Date(vSnippet.publishedAt).getTime();
-              const hoursOld = (Date.now() - publishedAt) / (1000 * 60 * 60);
+              // Add to batch Supabase daily stats
+              dailyStatsToUpsert.push({
+                video_id: item.id,
+                captured_date: todayStr,
+                view_count: viewCount
+              });
 
-              // Failsafe: If older than 48 hours, blacklist immediately to save API quota and skip tracking
-              if (hoursOld > 48) {
-                if (!blacklistedIds.has(item.id)) {
-                  await supabase.from('daily_blacklist').insert({
-                    video_id: item.id,
-                    channel_id: channelId,
-                    vph_first_hour: 0,
-                    baseline_vph: 0,
-                    multiplier: 3
-                  });
-                  blacklistedIds.add(item.id);
-                }
-                continue; // Skip VPH calculation and snapshot creation
+              // Calculate VPH using our pre-fetched map
+              const prevViews = prevSnapshotsMap.get(item.id);
+              let vph = 0;
+              if (prevViews !== undefined) {
+                vph = viewCount - prevViews;
+                if (vph < 0) vph = 0;
               }
 
-              // Calculate VPH by comparing with previous snapshot
-              const viewCount = safeInt(vStats?.viewCount);
-              let vph = 0;
-              let baselineVph = 0;
+              const baselineVph = baselineMap.get(item.id) || 0;
 
+              // Add to batch Turso snapshots (using INSERT OR IGNORE to prevent key constraint crashes)
+              snapshotsToInsert.push({
+                sql: "INSERT OR IGNORE INTO video_snapshots (video_id, channel_id, view_count, vph, baseline_vph, captured_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+                args: [item.id, channelId, viewCount, vph, Math.round(baselineVph)]
+              });
+            }
+
+            // 3. Perform batch inserts/upserts with error boundaries
+            if (videosToUpsert.length > 0) {
               try {
-                // Get previous snapshot
-                const prevRes = await turso.execute({
-                  sql: "SELECT view_count, captured_at FROM video_snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 1",
-                  args: [item.id]
-                });
+                const { error: err1 } = await supabase.from('videos').upsert(videosToUpsert, { onConflict: 'id' });
+                if (err1) console.error(`[batch upsert videos] channel ${channelId} error:`, err1.message);
+              } catch (e: any) {
+                console.error(`[batch upsert videos exception] channel ${channelId}:`, e.message);
+              }
+            }
 
-                if (prevRes.rows.length > 0) {
-                  const prevViews = Number(prevRes.rows[0].view_count) || 0;
-                  vph = viewCount - prevViews;
-                  if (vph < 0) vph = 0;
+            if (dailyStatsToUpsert.length > 0) {
+              try {
+                const { error: err2 } = await supabase.from('daily_video_stats').upsert(dailyStatsToUpsert, { onConflict: 'video_id,captured_date' });
+                if (err2) console.error(`[batch upsert daily stats] channel ${channelId} error:`, err2.message);
+              } catch (e: any) {
+                console.error(`[batch upsert daily stats exception] channel ${channelId}:`, e.message);
+              }
+            }
+
+            // Write snapshots in safe chunked batches of 40 to isolate any database write errors
+            if (snapshotsToInsert.length > 0) {
+              const WRITE_CHUNK_SIZE = 40;
+              for (let i = 0; i < snapshotsToInsert.length; i += WRITE_CHUNK_SIZE) {
+                const chunk = snapshotsToInsert.slice(i, i + WRITE_CHUNK_SIZE);
+                try {
+                  await turso.batch(chunk, "write");
+                } catch (tursoErr) {
+                  console.error(`[turso batch insert] chunk ${i / WRITE_CHUNK_SIZE} for channel ${channelId} error:`, tursoErr);
                 }
-
-                // Calculate baseline (average VPH from history)
-                const baseRes = await turso.execute({
-                  sql: "SELECT AVG(vph) as avg_vph FROM video_snapshots WHERE video_id = ? AND vph > 0",
-                  args: [item.id]
-                });
-                baselineVph = Number(baseRes.rows[0]?.avg_vph || 0);
-
-                // Insert snapshot with VPH
-                await turso.execute({
-                  sql: "INSERT INTO video_snapshots (video_id, channel_id, view_count, vph, baseline_vph, captured_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-                  args: [item.id, channelId, viewCount, vph, Math.round(baselineVph)]
-                });
-              } catch (tursoErr) {
-                console.error('Turso error:', tursoErr);
               }
             }
           }

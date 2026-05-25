@@ -53,17 +53,27 @@ export default async function VideoAnalysis({
   try {
     const rs = await turso.execute({
       sql: `
-        SELECT captured_at, vph, baseline_vph 
-        FROM video_snapshots 
-        WHERE video_id = ?
-        ORDER BY captured_at DESC 
+        WITH RankedSnapshots AS (
+          SELECT video_id, vph, baseline_vph, captured_at,
+                 strftime('%Y-%m-%dT%H:00:00', captured_at) AS hour_bucket,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY strftime('%Y-%m-%dT%H:00:00', captured_at)
+                   ORDER BY captured_at DESC
+                 ) as rn
+          FROM video_snapshots
+          WHERE video_id = ?
+        )
+        SELECT hour_bucket, captured_at, vph, baseline_vph
+        FROM RankedSnapshots
+        WHERE rn = 1
+        ORDER BY hour_bucket DESC
         LIMIT 48
       `,
       args: [videoId]
     });
     
     hourlyData = rs.rows.map(row => ({
-      captured_at: new Date(row.captured_at as string).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      captured_at: row.captured_at as string,
       vph: Number(row.vph) || 0,
       baseline_vph: Number(row.baseline_vph) || 0
     })).reverse();

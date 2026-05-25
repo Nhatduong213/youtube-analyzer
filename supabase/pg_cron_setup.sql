@@ -6,20 +6,8 @@ create extension if not exists pg_cron;
 -- Ví dụ: Channel N chạy lúc xx:N*2. Vì pg_cron chỉ cho phép lịch tới từng phút (không có giây), ta sẽ lập lịch chạy mỗi phút và trigger function.
 -- Tuy nhiên, cách tốt hơn để stagger với pg_cron là lên lịch chạy 1 job mỗi phút và truyền thông số phút hiện tại, Edge Function sẽ tự map.
 
--- Lịch chạy daily-scan mỗi giờ
--- Edge Function sẽ tự kiểm tra timezone của từng user để xác định xem có phải là 0:00 của user đó không.
--- Vui lòng thay thế <project-ref> và <anon-key> bằng giá trị thực tế của project bạn.
-select cron.schedule(
-  'daily-scan-job',
-  '0 * * * *',
-  $$
-    select net.http_post(
-      url:='https://xmdigxeedngotpjqwtbm.supabase.co/functions/v1/daily-scan',
-      headers:='{"Authorization": "Bearer sb_publishable_CqlfmuF0VLZbCcjE8AT_Kw_R1Z9ifLz"}'::jsonb,
-      body:='{}'::jsonb
-    )
-  $$
-);
+-- Unschedule old daily-scan-job (no longer needed)
+select cron.unschedule('daily-scan-job');
 
 -- Lịch chạy hourly-tracker: Có thể trigger mỗi phút hoặc mỗi 2 phút
 -- Nếu ta muốn trigger mỗi 2 phút để xử lý các channel được phân bổ vào phút đó
