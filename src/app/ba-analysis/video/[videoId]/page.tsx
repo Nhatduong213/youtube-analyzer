@@ -3,18 +3,21 @@ import { turso } from "@/lib/turso";
 import { ArrowLeft, Activity, CalendarDays, Tag } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { unstable_noStore as noStore } from "next/cache";
 import EngagementChart from "../../EngagementChart";
+import { fmt, parseDuration, safeChannelId } from "../../data-utils";
 
 export const dynamic = 'force-dynamic';
 
-function fmt(n: number): string {
-  if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return n.toLocaleString();
-}
+export default async function VideoAnalysis({
+  params,
+  searchParams,
+}: {
+  params: { videoId: string };
+  searchParams: { channelId?: string; sort?: string };
+}) {
+  noStore(); // Prevent Turso HTTP cache stale data
 
-export default async function VideoAnalysis({ params }: { params: { videoId: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -24,7 +27,7 @@ export default async function VideoAnalysis({ params }: { params: { videoId: str
 
   const { videoId } = params;
 
-  // 1. Fetch Video Metadata (Supabase)
+  // 1. Fetch Video Metadata (Supabase) — now includes new columns
   const { data: video } = await supabase
     .from('videos')
     .select('*, channels(title)')
@@ -81,23 +84,38 @@ export default async function VideoAnalysis({ params }: { params: { videoId: str
   }
 
   const channelTitle = (video.channels as any)?.title || "Unknown Channel";
+  const duration = parseDuration(video.duration);
+
+  // Safe back URL with channelId and sort preserved
+  // Safe back URL with channelId and sort preserved
+  const backChannelId = safeChannelId(searchParams.channelId) || video.channel_id;
+  const backSort = searchParams.sort;
+  const backParams = new URLSearchParams();
+  if (backChannelId) backParams.set("channelId", backChannelId);
+  if (backSort && backSort !== "vph") backParams.set("sort", backSort);
+  const backQuery = backParams.toString();
+  const backHref = `/ba-analysis${backQuery ? `?${backQuery}` : ""}`;
+
+  // Find max views for ratio bar calculation
+  const maxViews = dailyStats.length > 0 ? Math.max(...dailyStats.map(s => s.view_count)) : 1;
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div>
         <Link
-          href={`/ba-analysis?channelId=${video.channel_id}`}
-          className="w-9 h-9 rounded-lg bg-white/[0.06] flex items-center justify-center text-white/35 hover:text-white/60 hover:bg-white/10 transition-colors flex-shrink-0"
+          href={backHref}
+          className="flex items-center gap-2 text-white/40 hover:text-white text-sm mb-5 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
+          Back to Channel Analytics
         </Link>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-white truncate">{video.title}</h1>
-          <p className="text-xs font-mono text-white/30 mt-0.5">
-            {channelTitle} · Published {new Date(video.published_at).toLocaleDateString()}
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold text-white truncate">{video.title}</h1>
+        <p className="text-xs font-mono text-white/30 mt-0.5">
+          {channelTitle} · Published {new Date(video.published_at).toLocaleDateString()}
+          {duration !== "—" && ` · ${duration}`}
+          {video.is_short && " · 📱 Short"}
+        </p>
       </div>
 
       {/* Video Info Grid */}
@@ -122,18 +140,21 @@ export default async function VideoAnalysis({ params }: { params: { videoId: str
             <div className="p-5">
               <h3 className="text-sm font-semibold text-white mb-4">Quick Stats</h3>
               <div className="space-y-3">
-                <div className="flex justify-between items-center pb-2 border-b border-white/[0.05]">
-                  <span className="text-[10px] font-mono text-white/35 uppercase tracking-widest">Video ID</span>
-                  <span className="text-[10px] font-mono text-white/50 px-2 py-0.5 bg-white/5 border border-white/10 rounded-md">
-                    {video.id}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b border-white/[0.05]">
-                  <span className="text-[10px] font-mono text-white/35 uppercase tracking-widest">Channel</span>
-                  <span className="text-[10px] font-mono text-white/50 px-2 py-0.5 bg-white/5 border border-white/10 rounded-md">
-                    {video.channel_id}
-                  </span>
-                </div>
+                {[
+                  { label: "Views", value: fmt(video.view_count || 0) },
+                  { label: "Likes", value: fmt(video.like_count || 0) },
+                  { label: "Comments", value: fmt(video.comment_count || 0) },
+                  { label: "Duration", value: duration },
+                  { label: "Type", value: video.is_short ? "📱 Short" : "🎬 Video" },
+                  { label: "Video ID", value: video.id },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex justify-between items-center pb-2 border-b border-white/[0.05]">
+                    <span className="text-[10px] font-mono text-white/35 uppercase tracking-widest">{label}</span>
+                    <span className="text-[10px] font-mono text-white/50 px-2 py-0.5 bg-white/5 border border-white/10 rounded-md truncate max-w-[200px]">
+                      {value}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -179,14 +200,18 @@ export default async function VideoAnalysis({ params }: { params: { videoId: str
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">VPH — Last 48 Hours</h3>
-                <p className="text-[11px] font-mono text-white/25 mt-0.5">Views Per Hour tracking</p>
+                <p className="text-[11px] font-mono text-white/25 mt-0.5">
+                  {hourlyData.length > 0 && hourlyData.length < 24
+                    ? `Showing ${hourlyData.length} hours of data`
+                    : "Views Per Hour tracking"}
+                </p>
               </div>
             </div>
             {hourlyData.length > 0 ? (
               <EngagementChart data={hourlyData} />
             ) : (
               <div className="h-60 flex items-center justify-center text-sm font-mono text-white/20 border border-dashed border-white/10 rounded-lg">
-                No VPH data available in the last 48 hours.
+                No VPH data available. Collecting...
               </div>
             )}
           </div>
@@ -207,6 +232,12 @@ export default async function VideoAnalysis({ params }: { params: { videoId: str
                     <span className="text-sm text-white/60 font-mono">
                       {new Date(stat.captured_date).toLocaleDateString()}
                     </span>
+                    <div className="flex-1 mx-6">
+                      <div
+                        className="h-1 rounded-full bg-violet-500/30"
+                        style={{ width: `${(stat.view_count / maxViews) * 100}%` }}
+                      />
+                    </div>
                     <span className="text-[10px] font-mono text-white/50 px-2 py-0.5 bg-white/5 border border-white/10 rounded-md">
                       {stat.view_count.toLocaleString()} views
                     </span>

@@ -1,22 +1,81 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient as createSupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 import { createClient as createLibSQLClient } from "https://esm.sh/@libsql/client@0.5.2/web"
 
-serve(async (req) => {
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
+
+function nextYouTubeReset(): Date {
+  const now = new Date();
+  const candidate = new Date(now);
+  candidate.setUTCHours(7, 5, 0, 0);
+  if (candidate <= now) candidate.setUTCDate(candidate.getUTCDate() + 1);
+  return candidate;
+}
+
+function parseDurationSeconds(iso: string | null): number {
+  if (!iso) return 0;
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (+(m[1]||0))*3600 + (+(m[2]||0))*60 + (+(m[3]||0));
+}
+
+const safeInt = (v: any): number => Number.isFinite(+(v ?? NaN)) ? +v : 0;
+
+async function fetchVideoDetails(videoIds: string[], apiKey: string) {
+  const CHUNK = 50;
+  const results: any[] = [];
+  for (let i = 0; i < videoIds.length; i += CHUNK) {
+    const chunk = videoIds.slice(i, i + CHUNK);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos` +
+        `?part=statistics,snippet,contentDetails` +
+        `&id=${chunk.join(',')}&key=${apiKey}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timer);
+      if (!res.ok) { console.error(`[yt-api] HTTP ${res.status} chunk ${i/50}`); continue; }
+      const data = await res.json();
+      if (data.error) {
+        console.error(`[yt-api] error chunk ${i/50}:`, data.error.message);
+        if (data.error.code === 403) throw new Error('QuotaExceeded');
+        continue;
+      }
+      results.push(...(data.items ?? []));
+    } catch (err: any) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') { console.error(`[yt-api] timeout chunk ${i/50}`); continue; }
+      throw err;
+    }
+  }
+  return results;
+}
+
+async function processAllChannels(body: any) {
+  const targetChannelId = body.channelId;
+  const targetUserId = body.userId; // Optional: fetch for a specific user only
+
+  const supabase = createSupabaseClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
+
+  const turso = createLibSQLClient({
+    url: Deno.env.get('TURSO_DATABASE_URL') || '',
+    authToken: Deno.env.get('TURSO_AUTH_TOKEN') || '',
+  });
+
+  const { data: locked } = await supabase.rpc('try_claim_tracker_lock');
+  if (!locked) { console.log('[tracker] already running, skip'); return; }
+
   try {
-    const body = await req.json().catch(() => ({}));
-    const targetChannelId = body.channelId;
-    const targetUserId = body.userId; // Optional: fetch for a specific user only
-
-    const supabase = createSupabaseClient(
-      Deno.env.get('SUPABASE_URL') || '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-    );
-
-    const turso = createLibSQLClient({
-      url: Deno.env.get('TURSO_DATABASE_URL') || '',
-      authToken: Deno.env.get('TURSO_AUTH_TOKEN') || '',
-    });
+    // Check quota state
+    const { data: qf } = await supabase
+      .from('system_flags').select('value').eq('key','yt_quota_reset').single();
+    if (qf?.value && new Date(qf.value) > new Date()) {
+      console.log('[tracker] quota exhausted until', qf.value); return;
+    }
 
     // 1. Get all users (or specific user)
     let usersQuery = supabase.from('users').select('id, youtube_key_ref');
@@ -26,7 +85,8 @@ serve(async (req) => {
     const { data: users, error: usersErr } = await usersQuery;
     if (usersErr) throw usersErr;
     if (!users || users.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'No users found' }), { headers: { "Content-Type": "application/json" } });
+      console.log('[tracker] No users found');
+      return;
     }
 
     let totalProcessed = 0;
@@ -86,7 +146,7 @@ serve(async (req) => {
             });
             totalErrors++;
             console.error(`User ${user.id}: API key error 403 for channel ${channelId}`);
-            continue;
+            throw new Error('QuotaExceeded');
           }
 
           if (channelRes.status >= 500) {
@@ -123,29 +183,42 @@ serve(async (req) => {
 
           // Filter out blacklisted videos
           const activeItems = (playlistData.items || []).filter((item: any) => !blacklistedIds.has(item.contentDetails.videoId));
-          const videoIds = activeItems.map((item: any) => item.contentDetails.videoId).join(',') || '';
+          const videoIdsList = activeItems.map((item: any) => item.contentDetails.videoId) || [];
 
-          if (videoIds) {
-            const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds}&key=${apiKey}`);
-            const videoData = await videoRes.json();
+          if (videoIdsList.length > 0) {
+            const videoItems = await fetchVideoDetails(videoIdsList, apiKey);
 
-            for (const item of (videoData.items || [])) {
+            for (const item of videoItems) {
               const vSnippet = item.snippet;
               const vStats = item.statistics;
 
+              // Detect Shorts
+              const duration = item.contentDetails?.duration || null;
+              const durationSecs = parseDurationSeconds(duration);
+              const SHORTS_MAX = 180;
+              const isDurationShort = durationSecs > 0 && durationSecs <= SHORTS_MAX;
+              const isTitleShort = durationSecs === 0 && /#shorts?\b/i.test(vSnippet.title ?? '');
+              const isShort = isDurationShort || isTitleShort;
+
               // Upsert video to Supabase (shared)
-              await supabase.from('videos').upsert({
+              const { error: upsertErr } = await supabase.from('videos').upsert({
                 id: item.id,
                 channel_id: channelId,
                 title: vSnippet.title,
                 description: vSnippet.description || '',
                 tags: vSnippet.tags || [],
                 published_at: vSnippet.publishedAt,
-                thumbnail_url: vSnippet.thumbnails?.high?.url || ''
-              });
+                thumbnail_url: vSnippet.thumbnails?.high?.url || vSnippet.thumbnails?.medium?.url || vSnippet.thumbnails?.default?.url || '',
+                like_count: safeInt(vStats?.likeCount),
+                comment_count: safeInt(vStats?.commentCount),
+                view_count: safeInt(vStats?.viewCount),
+                duration,
+                is_short: isShort
+              }, { onConflict: 'id' });
+              if (upsertErr) console.error(`[upsert] ${item.id}:`, upsertErr.message);
 
               // Calculate VPH by comparing with previous snapshot
-              const viewCount = parseInt(vStats.viewCount) || 0;
+              const viewCount = safeInt(vStats?.viewCount);
               let vph = 0;
               let baselineVph = 0;
 
@@ -184,6 +257,7 @@ serve(async (req) => {
         } catch (channelErr) {
           console.error(`Error processing channel ${channelId} for user ${user.id}:`, channelErr);
           totalErrors++;
+          if ((channelErr as any).message === 'QuotaExceeded') throw channelErr;
         }
       }
     }
@@ -196,12 +270,33 @@ serve(async (req) => {
       console.error('Failed to cleanup Turso:', cleanupErr);
     }
 
-    return new Response(
-      JSON.stringify({ success: true, processed: totalProcessed, errors: totalErrors }),
-      { headers: { "Content-Type": "application/json" } }
-    );
-  } catch (error: any) {
-    console.error('[hourly-tracker] fatal:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    console.log(`[hourly-tracker] done: processed=${totalProcessed}, errors=${totalErrors}`);
+  } catch (err: any) {
+    if (err.message === 'QuotaExceeded') {
+      const reset = nextYouTubeReset();
+      await supabase.from('system_flags')
+        .upsert({ key: 'yt_quota_reset', value: reset.toISOString() });
+      console.error('[tracker] quota exhausted until', reset.toISOString());
+    } else { throw err; }
+  } finally {
+    await supabase.rpc('release_tracker_lock').catch(() => {});
   }
-})
+}
+
+Deno.serve(async (req) => {
+  const authHeader = req.headers.get('Authorization');
+  if (authHeader !== `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+
+  EdgeRuntime.waitUntil(
+    processAllChannels(body).catch(err => console.error('[hourly-tracker] fatal:', err))
+  );
+
+  return new Response(
+    JSON.stringify({ status: 'accepted', time: new Date().toISOString() }),
+    { headers: { 'Content-Type': 'application/json' }, status: 202 }
+  );
+});

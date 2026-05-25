@@ -52,7 +52,7 @@ export default async function Dashboard() {
   // Query through user_channels junction table
   const { data: userChannels } = await supabase
     .from("user_channels")
-    .select("channels(id, title, handle, subscriber_count, view_count, last_synced_at)")
+    .select("channels(id, title, subscriber_count, view_count, last_synced_at)")
     .eq("user_id", user.id);
 
   const channels = userChannels?.map((uc: any) => uc.channels).filter(Boolean) || [];
@@ -228,13 +228,13 @@ export default async function Dashboard() {
                     fontSize: 14,
                   }}
                 >
-                  {(ch.title || ch.handle || "?")[0].toUpperCase()}
+                  {(ch.title || "?")[0].toUpperCase()}
                 </div>
 
                 {/* Name / handle */}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white/80">{ch.title || ch.handle || ch.id}</p>
-                  {ch.handle && <p className="text-[11px] font-mono text-white/25">{ch.handle}</p>}
+                  <p className="text-sm font-medium text-white/80">{ch.title || ch.id}</p>
+                  <p className="text-[11px] font-mono text-white/25">{ch.id}</p>
                 </div>
 
                 {/* Stats */}

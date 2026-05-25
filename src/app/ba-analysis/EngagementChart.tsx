@@ -18,17 +18,47 @@ function fmt(n: number): string {
   return n.toLocaleString();
 }
 
-export default function EngagementChart({ data }: { data: any[] }) {
-  // Calculate average baseline for the reference line
-  const avgBaseline =
-    data.length > 0
-      ? Math.round(data.reduce((s, d) => s + (d.baseline_vph || 0), 0) / data.length)
-      : 0;
+interface ChartDataPoint {
+  // Channel-level chart: aggregated data
+  hour?: string;
+  total_vph?: number;
+  video_count?: number;
+  // Video-level chart: per-video data (used by video detail page)
+  captured_at?: string;
+  vph?: number;
+  baseline_vph?: number;
+}
+
+export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
+  if (data.length === 0) return null;
+
+  // Detect data format: channel-level (hour, total_vph) or video-level (captured_at, vph)
+  const isChannelChart = data[0].hour !== undefined;
+
+  // Normalize data for chart
+  const chartData = data.map(d => ({
+    time: isChannelChart
+      ? (d.hour?.split('T')[1]?.slice(0, 5) || d.hour || '')
+      : (d.captured_at || ''),
+    vph: isChannelChart ? (d.total_vph || 0) : (d.vph || 0),
+    baseline: isChannelChart ? 0 : (d.baseline_vph || 0),
+    videoCount: d.video_count || 0,
+  }));
+
+  // Calculate average for reference line
+  const avgVph = Math.round(
+    chartData.reduce((s, d) => s + d.vph, 0) / chartData.length
+  );
+
+  // For video-level, compute baseline reference
+  const avgBaseline = !isChannelChart
+    ? Math.round(chartData.reduce((s, d) => s + d.baseline, 0) / chartData.length)
+    : 0;
 
   return (
     <div className="h-60 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
           <defs>
             <linearGradient id="vphGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
@@ -41,7 +71,7 @@ export default function EngagementChart({ data }: { data: any[] }) {
             vertical={false}
           />
           <XAxis
-            dataKey="captured_at"
+            dataKey="time"
             tick={{
               fill: "rgba(255,255,255,0.25)",
               fontSize: 9,
@@ -71,8 +101,16 @@ export default function EngagementChart({ data }: { data: any[] }) {
             }}
             labelStyle={{ color: "rgba(255,255,255,0.4)" }}
             itemStyle={{ color: "#a78bfa" }}
-            formatter={(v: any) => [fmt(Number(v) || 0) + " VPH", ""]}
+            formatter={(value: any, _name: any, props: any) => {
+              const vph = fmt(Number(value) || 0) + " VPH";
+              const vc = props?.payload?.videoCount;
+              if (vc && vc > 0) {
+                return [vph + ` · ${vc} videos`, ""];
+              }
+              return [vph, ""];
+            }}
           />
+          {/* Reference line: baseline for video charts, average for channel charts */}
           {avgBaseline > 0 && (
             <ReferenceLine
               y={avgBaseline}
