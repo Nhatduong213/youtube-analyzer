@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Tv, BarChart3, Bot, Settings, Activity, Menu, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase-client";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -14,6 +16,20 @@ const navigation = [
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
+  const [email, setEmail] = useState<string>("...");
+  const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) {
+        setEmail(data.user.email);
+      } else {
+        setEmail("Guest");
+      }
+    });
+  }, []);
+
+  const firstLetter = email && email !== "..." ? email[0].toUpperCase() : "U";
 
   return (
     <aside
@@ -72,12 +88,12 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
       {/* User section */}
       <div className={`p-3 border-t border-white/10 flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-xs font-bold text-white">
-          U
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-xs font-bold text-white uppercase">
+          {firstLetter}
         </div>
         {!collapsed && (
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-white/50 truncate">user@example.com</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-white/50 truncate" title={email}>{email}</p>
             <p className="text-[9px] font-mono text-white/20">Pro plan</p>
           </div>
         )}
