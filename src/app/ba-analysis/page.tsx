@@ -27,6 +27,9 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
     redirect('/login');
   }
 
+  // Ensure user profile exists in public.users table
+  await supabase.from('users').upsert({ id: user.id });
+
   // Channel list for selector
   let channelsList: any[] = [];
   let activeChannelId: string | null = safeChannelId(searchParams.channelId) || null;

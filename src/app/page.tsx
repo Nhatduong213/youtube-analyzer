@@ -44,6 +44,9 @@ export default async function Dashboard() {
     redirect('/login');
   }
 
+  // Ensure user profile exists in public.users table
+  await supabase.from('users').upsert({ id: user.id });
+
   let totalSubs = 0;
   let totalViews = 0;
   let lastSyncedTime: number = 0;

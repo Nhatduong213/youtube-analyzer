@@ -51,11 +51,11 @@ export async function saveUserSettings(formData: FormData) {
       // 2. Cập nhật reference vào bảng users
       const { error: updateError } = await ssrClient
         .from('users')
-        .update({ 
+        .upsert({ 
+          id: userId,
           youtube_key_ref: ref,
           timezone: timezone || 'UTC'
-        })
-        .eq('id', userId);
+        });
 
       if (updateError) {
         throw new Error(`Failed to update user profile: ${updateError.message}`);
@@ -64,8 +64,10 @@ export async function saveUserSettings(formData: FormData) {
       // Nếu không nhập API Key, chỉ update timezone
       const { error: updateError } = await ssrClient
         .from('users')
-        .update({ timezone: timezone || 'UTC' })
-        .eq('id', userId);
+        .upsert({
+          id: userId,
+          timezone: timezone || 'UTC'
+        });
 
       if (updateError) {
         throw new Error(`Failed to update timezone: ${updateError.message}`);
