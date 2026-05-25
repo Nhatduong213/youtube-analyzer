@@ -56,11 +56,20 @@ export default async function Dashboard() {
   let lastSyncedTime: number = 0;
   let blacklist: any[] = [];
 
-  // Query through user_channels junction table
-  const { data: userChannels } = await supabase
-    .from("user_channels")
-    .select("channels(id, title, subscriber_count, view_count, last_synced_at)")
-    .eq("user_id", user.id);
+  // Query user channels & API key errors in parallel to reduce database latency
+  const [userChannelsResult, keyErrorsResult] = await Promise.all([
+    supabase
+      .from("user_channels")
+      .select("channels(id, title, subscriber_count, view_count, last_synced_at)")
+      .eq("user_id", user.id),
+    supabase
+      .from("api_key_errors")
+      .select("channel_id, error_message")
+      .eq("user_id", user.id)
+  ]);
+
+  const userChannels = userChannelsResult.data;
+  const keyErrors = keyErrorsResult.data;
 
   const channels = userChannels?.map((uc: any) => uc.channels).filter(Boolean) || [];
 
@@ -87,12 +96,6 @@ export default async function Dashboard() {
       blacklist = bList;
     }
   }
-
-  // Check for API key errors
-  const { data: keyErrors } = await supabase
-    .from("api_key_errors")
-    .select("channel_id, error_message")
-    .eq("user_id", user.id);
 
   const syncMins = lastSyncedTime ? Math.floor((Date.now() - lastSyncedTime) / 6e4) : 0;
   const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
