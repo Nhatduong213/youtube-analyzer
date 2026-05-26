@@ -29,6 +29,19 @@ interface ChartDataPoint {
   baseline_vph?: number;
 }
 
+function parseUTCDate(str: string): Date {
+  if (!str) return new Date();
+  let cleaned = str;
+  if (cleaned.includes('T')) {
+    if (!cleaned.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(cleaned)) {
+      cleaned += 'Z';
+    }
+  } else {
+    cleaned = cleaned.replace(' ', 'T') + 'Z';
+  }
+  return new Date(cleaned);
+}
+
 export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
   if (data.length === 0) return null;
 
@@ -85,7 +98,7 @@ export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
               if (!tick) return '';
               try {
                 // Ensure correct local time conversion on browser
-                const date = new Date(tick.includes('T') ? tick : tick.replace(' ', 'T') + 'Z');
+                const date = parseUTCDate(tick);
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
                 return `${hours}:${minutes}`;
@@ -117,7 +130,7 @@ export default function EngagementChart({ data }: { data: ChartDataPoint[] }) {
             labelFormatter={(labelValue) => {
               if (!labelValue) return '';
               try {
-                const date = new Date(labelValue.includes('T') ? labelValue : labelValue.replace(' ', 'T') + 'Z');
+                const date = parseUTCDate(labelValue);
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
                 return `${hours}:${minutes}`;
