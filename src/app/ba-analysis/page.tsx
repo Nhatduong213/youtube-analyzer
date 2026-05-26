@@ -71,10 +71,24 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
         if (rs.rows.length === 0) return [];
 
         const videoIds = rs.rows.map(row => row.video_id as string);
-        const { data: videosData } = await supabase
-          .from('videos')
-          .select('id, title, published_at, thumbnail_url, like_count, comment_count, duration, is_short')
-          .in('id', videoIds);
+
+        // Chunk videoIds into batches of 1000 to bypass Supabase's default 1000-row limit
+        const chunkSize = 1000;
+        const chunks: string[][] = [];
+        for (let i = 0; i < videoIds.length; i += chunkSize) {
+          chunks.push(videoIds.slice(i, i + chunkSize));
+        }
+
+        const results = await Promise.all(
+          chunks.map(chunk =>
+            supabase
+              .from('videos')
+              .select('id, title, published_at, thumbnail_url, like_count, comment_count, duration, is_short')
+              .in('id', chunk)
+          )
+        );
+
+        const videosData = results.flatMap(r => r.data || []);
 
         return mergeVideoData(
           rs.rows.map(r => ({
@@ -84,7 +98,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
             view_count: Number(r.view_count) || 0,
             captured_at: r.captured_at as string,
           })),
-          videosData || []
+          videosData
         );
       })(),
     ]);
