@@ -78,7 +78,7 @@ export default function EngagementChart({
     : 0;
 
   return (
-    <div className="h-full w-full">
+    <div className={isSparkline ? "h-full w-full" : "h-60 w-full"}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={isSparkline ? { top: 4, right: 6, left: 6, bottom: 2 } : { top: 5, right: 5, left: -10, bottom: 0 }}>
           <defs>
