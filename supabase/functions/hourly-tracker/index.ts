@@ -91,6 +91,7 @@ async function processAllChannels(body: any) {
 
     let totalProcessed = 0;
     let totalErrors = 0;
+    const processedChannels = new Set<string>();
 
     // 2. Loop per user
     for (const user of users) {
@@ -118,6 +119,11 @@ async function processAllChannels(body: any) {
       // 3. Process each channel with this user's key
       for (const uc of userChannels) {
         const channelId = uc.channel_id;
+        if (processedChannels.has(channelId)) {
+          console.log(`Channel ${channelId} already processed in this run, skipping`);
+          continue;
+        }
+        processedChannels.add(channelId);
         console.log(`User ${user.id} → Channel ${channelId}`);
 
         try {

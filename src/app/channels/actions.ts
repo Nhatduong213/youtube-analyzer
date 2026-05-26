@@ -69,7 +69,7 @@ export async function triggerSyncingFailsafe() {
 
     const syncingChannels = userChannels
       ?.map((uc: any) => uc.channels)
-      .filter((ch: any) => ch && ch.title === 'Syncing...') || [];
+      .filter((ch: any) => ch && ch.title === 'Syncing...' && ch.id && ch.id.startsWith('UC')) || [];
 
     if (syncingChannels.length === 0) return;
 
@@ -129,6 +129,10 @@ export async function addChannel(formData: FormData) {
     if (!data.items?.length) return { success: false, error: `Handle not found: ${parsed.value}` };
     
     channelId = data.items[0].id;
+  }
+
+  if (!channelId.startsWith('UC') || channelId.length !== 24) {
+    return { success: false, error: "Invalid YouTube channel ID format" };
   }
 
   // 1. Upsert channel (shared, no user_id)
