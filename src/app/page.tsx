@@ -157,7 +157,11 @@ function BreakoutCard({
                   </span>
                 )}
                 <span className="text-white/15">·</span>
-                <span>{new Date(video.captured_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                {video.published_at ? (
+                  <span>Published {new Date(video.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                ) : (
+                  <span>Captured {new Date(video.captured_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                )}
               </div>
             </div>
           </div>
@@ -381,6 +385,7 @@ export default async function Dashboard() {
             baseline_vph: baseline,
             spike_ratio: spikeRatio,
             captured_at: row.captured_at,
+            published_at: meta?.published_at || null,
             like_count: Number(meta?.like_count) || 0,
             comment_count: Number(meta?.comment_count) || 0,
             view_count: Number(row.view_count) || 0
