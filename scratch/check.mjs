@@ -2,7 +2,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!sbUrl || !sbKey) {
   console.error('Missing env vars. Run with: node --env-file=.env.local scratch/check.mjs');

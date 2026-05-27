@@ -5,7 +5,7 @@ create extension if not exists pg_cron;
 -- PREREQUISITE: Set these GUCs in your Supabase SQL Editor ONCE:
 --
 --   ALTER DATABASE postgres SET app.supabase_url = 'https://<your-project>.supabase.co';
---   ALTER DATABASE postgres SET app.service_role_key = '<your-service-role-key>';
+--   ALTER DATABASE postgres SET app.secret_key = '<your-secret-key>';
 --
 -- Then reload the config:  SELECT pg_reload_conf();
 -- ======================================================================
@@ -19,7 +19,7 @@ select cron.schedule(
     select net.http_post(
       url := current_setting('app.supabase_url') || '/functions/v1/hourly-tracker',
       headers := json_build_object(
-        'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+        'Authorization', 'Bearer ' || current_setting('app.secret_key')
       )::jsonb,
       body := '{}'::jsonb
     )

@@ -74,7 +74,7 @@ export async function triggerSyncingFailsafe() {
     if (syncingChannels.length === 0) return;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (serviceRoleKey && supabaseUrl) {
       const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
@@ -162,7 +162,7 @@ export async function addChannel(formData: FormData) {
   // 4. Trigger edge function immediately to fetch real data
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
     
     if (serviceRoleKey && supabaseUrl) {
       const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
