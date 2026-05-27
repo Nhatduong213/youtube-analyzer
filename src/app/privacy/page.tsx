@@ -96,6 +96,11 @@ export default function PrivacyPage() {
                 </a>{" "}
                 page. Alternatively, you can delete your configured YouTube API Keys inside your Settings page within the app.
               </p>
+
+              <h3 className="text-white font-medium mt-4">5. Cookie Policy</h3>
+              <p>
+                We use strictly necessary cookies to authenticate your account and persist session states. These cookies are essential for the security and basic functionality of the application and do not track your browsing activity on other websites.
+              </p>
             </div>
           </section>
 
@@ -162,6 +167,11 @@ export default function PrivacyPage() {
                   Trang Cài đặt Bảo mật Google
                 </a>{" "}
                 hoặc chủ động xóa API Key đã cấu hình trong phần Cài đặt hệ thống trên trang web.
+              </p>
+
+              <h3 className="text-white font-medium mt-4">5. Chính sách Cookie</h3>
+              <p>
+                Chúng tôi sử dụng các cookie thiết yếu (strictly necessary cookies) để xác thực tài khoản và duy trì trạng thái đăng nhập của bạn. Các cookie này bắt buộc phải có để đảm bảo tính bảo mật và tính năng cơ bản của ứng dụng, hoàn toàn không theo dõi hoạt động lướt web của bạn trên các trang web khác.
               </p>
             </div>
           </section>
