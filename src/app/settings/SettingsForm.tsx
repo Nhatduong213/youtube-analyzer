@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Key, Globe, SlidersHorizontal, AlertTriangle, Check } from "lucide-react";
+import { Key, Globe, Check, AlertCircle, X } from "lucide-react";
 import { saveUserSettings } from "./actions";
 
 export default function SettingsForm() {
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
-  const [mult, setMult] = useState(3);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
     const formData = new FormData(e.currentTarget);
 
     startTransition(async () => {
@@ -19,7 +20,7 @@ export default function SettingsForm() {
         setSaved(true);
         setTimeout(() => setSaved(false), 2200);
       } else {
-        alert("Failed to save settings: " + res.error);
+        setError(res.error || "Unknown error");
       }
     });
   };
@@ -33,6 +34,17 @@ export default function SettingsForm() {
           API keys, timezone &amp; preferences
         </p>
       </div>
+
+      {/* Inline error banner */}
+      {error && (
+        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="flex-shrink-0 hover:text-red-300 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* ── YouTube API Key ────────────────────────────────── */}
@@ -90,37 +102,6 @@ export default function SettingsForm() {
             </select>
             <p className="text-[11px] font-mono text-white/20 mt-1.5">
               Used for localized daily analytics resets
-            </p>
-          </div>
-        </div>
-
-        {/* ── Spike Multiplier ───────────────────────────────── */}
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-violet-400" />
-              <h2 className="text-sm font-semibold text-white">Spike Multiplier</h2>
-            </div>
-            <span className="text-xl font-mono font-bold text-violet-400">{mult}×</span>
-          </div>
-          <div>
-            <input
-              type="range"
-              name="spikeMultiplier"
-              min={2}
-              max={10}
-              step={0.5}
-              value={mult}
-              onChange={(e) => setMult(Number(e.target.value))}
-              className="w-full accent-violet-500 cursor-pointer"
-            />
-            <div className="flex justify-between text-[9px] font-mono text-white/20 mt-1">
-              <span>2×</span>
-              <span>10×</span>
-            </div>
-            <p className="text-[11px] font-mono text-amber-400/60 mt-3 flex items-center gap-1.5">
-              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-              Not yet saved to DB — UI only
             </p>
           </div>
         </div>

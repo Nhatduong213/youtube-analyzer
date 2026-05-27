@@ -18,8 +18,13 @@ import type { MergedVideo } from "./data-utils";
 
 export const dynamic = 'force-dynamic';
 
-export default async function BAAnalysis({ searchParams }: { searchParams: { channelId?: string; sort?: string } }) {
+export default async function BAAnalysis(props: {
+  searchParams: Promise<{ channelId?: string; sort?: string }> | { channelId?: string; sort?: string };
+}) {
   noStore(); // Prevent Turso HTTP cache stale data
+
+  // Await for Next.js 15 compatibility (searchParams is a Promise)
+  const searchParams = await Promise.resolve(props.searchParams);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -31,8 +36,7 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
   // Ensure user profile exists in public.users table
   await supabase.from('users').upsert({ id: user.id });
 
-  // Run syncing failsafe in the background
-  triggerSyncingFailsafe().catch((e) => console.error("Failsafe run error:", e));
+
 
   // Channel list for selector
   let channelsList: any[] = [];
@@ -46,6 +50,12 @@ export default async function BAAnalysis({ searchParams }: { searchParams: { cha
     .order('created_at', { ascending: true });
 
   const channels = userChannels?.map((uc: any) => uc.channels).filter(Boolean) || [];
+
+  // Run syncing failsafe only when there are stuck channels
+  if (channels.some((ch: any) => ch.title === 'Syncing...')) {
+    triggerSyncingFailsafe().catch((e) => console.error("Failsafe run error:", e));
+  }
+
   if (channels.length > 0) {
     channelsList = channels;
     if (!activeChannelId) {

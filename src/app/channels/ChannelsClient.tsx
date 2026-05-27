@@ -3,17 +3,11 @@
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { addChannel, deleteChannel } from "./actions";
-import { Plus, Trash2, Loader2, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Loader2, TrendingUp, AlertCircle, X } from "lucide-react";
 import Link from "next/link";
+import { fmt } from "@/app/ba-analysis/data-utils";
 
 /* ── Helpers ─────────────────────────────────────────────────── */
-
-function fmt(n: number): string {
-  if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return n.toLocaleString();
-}
 
 /** Deterministic gradient pair from a string seed */
 function gradientFromId(id: string): [string, string] {
@@ -69,32 +63,84 @@ function Ava({ title, id, size = 44 }: { title: string; id: string; size?: numbe
   );
 }
 
+/* ── Add Channel Form (shared between empty & main view) ───── */
+
+function AddChannelForm({
+  onSubmit,
+  isPending,
+  error,
+  onDismissError,
+}: {
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  isPending: boolean;
+  error: string | null;
+  onDismissError: () => void;
+}) {
+  return (
+    <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
+      <h2 className="text-sm font-semibold text-white mb-3">Add Channel</h2>
+      <form onSubmit={onSubmit} className="flex gap-3">
+        <input
+          name="channelId"
+          required
+          maxLength={200}
+          placeholder="Channel ID or @handle"
+          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/20 font-mono outline-none focus:border-violet-500/50 transition-colors"
+        />
+        <button
+          type="submit"
+          disabled={isPending}
+          className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          {isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+          {isPending ? "Adding..." : "Add"}
+        </button>
+      </form>
+      {error && (
+        <div className="mt-3 flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-red-400">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span className="flex-1">{error}</span>
+          <button onClick={onDismissError} className="flex-shrink-0 hover:text-red-300 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Component ───────────────────────────────────────────────── */
 
 export default function ChannelsClient({ initialChannels }: { initialChannels: any[] }) {
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
       const res = await addChannel(formData);
       if (res.success && res.channelId) {
         router.push(`/ba-analysis?channelId=${res.channelId}`);
       } else if (!res.success) {
-        alert("Failed to add channel: " + res.error);
+        setError(res.error || "Unknown error");
       }
     });
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this channel?")) {
-      setDeletingId(id);
-      await deleteChannel(id);
-      setDeletingId(null);
-    }
+    setDeletingId(id);
+    setConfirmDeleteId(null);
+    await deleteChannel(id);
+    setDeletingId(null);
   };
 
   /* ── Empty state ─────────────────────────────────────────── */
@@ -107,30 +153,12 @@ export default function ChannelsClient({ initialChannels }: { initialChannels: a
           <p className="text-xs font-mono text-white/30 mt-0.5">0 channels tracked</p>
         </div>
 
-        {/* Add Channel card */}
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-white mb-3">Add Channel</h2>
-          <form onSubmit={handleSubmit} className="flex gap-3">
-            <input
-              name="channelId"
-              required
-              placeholder="Channel ID or @handle"
-              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/20 font-mono outline-none focus:border-violet-500/50 transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-            >
-              {isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-              {isPending ? "Adding..." : "Add"}
-            </button>
-          </form>
-        </div>
+        <AddChannelForm
+          onSubmit={handleSubmit}
+          isPending={isPending}
+          error={error}
+          onDismissError={() => setError(null)}
+        />
 
         {/* Empty placeholder */}
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl py-16 flex flex-col items-center gap-4">
@@ -154,30 +182,12 @@ export default function ChannelsClient({ initialChannels }: { initialChannels: a
         </p>
       </div>
 
-      {/* Add Channel card */}
-      <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-white mb-3">Add Channel</h2>
-        <form onSubmit={handleSubmit} className="flex gap-3">
-          <input
-            name="channelId"
-            required
-            placeholder="Channel ID or @handle"
-            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-white/20 font-mono outline-none focus:border-violet-500/50 transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={isPending}
-            className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            {isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-            {isPending ? "Adding..." : "Add"}
-          </button>
-        </form>
-      </div>
+      <AddChannelForm
+        onSubmit={handleSubmit}
+        isPending={isPending}
+        error={error}
+        onDismissError={() => setError(null)}
+      />
 
       {/* Channel cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -195,17 +205,37 @@ export default function ChannelsClient({ initialChannels }: { initialChannels: a
                   <p className="text-[11px] font-mono text-white/30 truncate">{ch.id}</p>
                 </div>
               </div>
-              <button
-                onClick={() => handleDelete(ch.id)}
-                disabled={deletingId === ch.id}
-                className="opacity-0 group-hover:opacity-100 p-1.5 text-white/30 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex-shrink-0"
-              >
-                {deletingId === ch.id ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <div className="relative flex-shrink-0">
+                {confirmDeleteId === ch.id ? (
+                  <div className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 rounded-lg px-2 py-1 animate-in fade-in">
+                    <span className="text-[10px] text-red-400 font-mono whitespace-nowrap">Delete?</span>
+                    <button
+                      onClick={() => handleDelete(ch.id)}
+                      className="text-[10px] font-bold text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded transition-colors"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-[10px] font-bold text-white/40 hover:text-white px-1.5 py-0.5 rounded transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
                 ) : (
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <button
+                    onClick={() => setConfirmDeleteId(ch.id)}
+                    disabled={deletingId === ch.id}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 text-white/30 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                  >
+                    {deletingId === ch.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
 
             {/* 2×2 mini stats */}

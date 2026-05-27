@@ -1,7 +1,13 @@
+// Usage: node --env-file=.env.local scratch/check.mjs
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
-const sbUrl = 'https://xmdigxeedngotpjqwtbm.supabase.co';
-const sbKey = 'sb_secret_wk87TX5R4_hIn_ep07z0ow_77fHoYE7';
+const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!sbUrl || !sbKey) {
+  console.error('Missing env vars. Run with: node --env-file=.env.local scratch/check.mjs');
+  process.exit(1);
+}
 
 const supabase = createSupabaseClient(sbUrl, sbKey);
 

@@ -2,21 +2,24 @@ import { createClient } from "@/lib/supabase-server";
 import { turso } from "@/lib/turso";
 import { ArrowLeft, Activity, CalendarDays, Tag } from "lucide-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import EngagementChart from "../../EngagementChart";
 import { fmt, parseDuration, safeChannelId } from "../../data-utils";
 
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
 export const dynamic = 'force-dynamic';
 
-export default async function VideoAnalysis({
-  params,
-  searchParams,
-}: {
-  params: { videoId: string };
-  searchParams: { channelId?: string; sort?: string };
+export default async function VideoAnalysis(props: {
+  params: Promise<{ videoId: string }> | { videoId: string };
+  searchParams: Promise<{ channelId?: string; sort?: string }> | { channelId?: string; sort?: string };
 }) {
   noStore(); // Prevent Turso HTTP cache stale data
+
+  // Await for Next.js 15 compatibility (params/searchParams are Promises)
+  const resolvedParams = await Promise.resolve(props.params);
+  const searchParams = await Promise.resolve(props.searchParams);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -25,7 +28,12 @@ export default async function VideoAnalysis({
     redirect('/login');
   }
 
-  const { videoId } = params;
+  const { videoId } = resolvedParams;
+
+  // Validate videoId: only valid 11-char YouTube video IDs reach the DB
+  if (!VIDEO_ID_RE.test(videoId)) {
+    notFound();
+  }
 
   // 1. Fetch Video Metadata (Supabase) — now includes new columns
   const { data: video } = await supabase
