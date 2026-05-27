@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
 
+import Link from "next/link";
+
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -61,7 +63,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-background">
+    <div className="flex h-screen w-screen flex-col items-center justify-center bg-background relative">
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/20 blur-[120px]" />
       </div>
@@ -145,6 +147,12 @@ export default function LoginPage() {
           </CardFooter>
         )}
       </Card>
+
+      <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-muted-foreground/60 z-10 space-x-4">
+        <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy / Chính sách bảo mật</Link>
+        <span>•</span>
+        <Link href="/terms" className="hover:text-white transition-colors">Terms of Service / Điều khoản dịch vụ</Link>
+      </div>
     </div>
   );
 }

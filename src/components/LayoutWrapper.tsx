@@ -6,11 +6,11 @@ import { Sidebar } from "@/components/Sidebar";
 
 export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === "/login";
+  const isPublicPage = pathname === "/login" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/auth");
   const [collapsed, setCollapsed] = useState(false);
 
-  if (isLogin) {
-    return <main className="flex-1 overflow-hidden">{children}</main>;
+  if (isPublicPage) {
+    return <main className="flex-1 overflow-auto">{children}</main>;
   }
 
   return (
